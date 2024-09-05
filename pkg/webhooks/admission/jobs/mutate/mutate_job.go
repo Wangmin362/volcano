@@ -60,6 +60,7 @@ var service = &router.AdmissionService{
 			Name: "mutatejob.volcano.sh",
 			Rules: []whv1.RuleWithOperations{
 				{
+					// 创建Job资源的时候生效
 					Operations: []whv1.OperationType{whv1.Create},
 					Rule: whv1.Rule{
 						APIGroups:   []string{"batch.volcano.sh"},

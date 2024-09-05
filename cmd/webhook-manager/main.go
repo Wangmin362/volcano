@@ -46,18 +46,22 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	klog.InitFlags(nil)
 
+	// 参数配置
 	config := options.NewConfig()
 	config.AddFlags(pflag.CommandLine)
 
 	cliflag.InitFlags()
 
+	// 日志刷新
 	go wait.Until(klog.Flush, *logFlushFreq, wait.NeverStop)
 	defer klog.Flush()
 
+	// 参数检查
 	if err := config.CheckPortOrDie(); err != nil {
 		klog.Fatalf("Configured port is invalid: %v", err)
 	}
 
+	// 证书检查
 	if err := config.ParseCAFiles(nil); err != nil {
 		klog.Fatalf("Failed to parse CA file: %v", err)
 	}

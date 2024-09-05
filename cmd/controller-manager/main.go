@@ -40,12 +40,14 @@ import (
 	"volcano.sh/volcano/pkg/version"
 )
 
+// 日志刷新频率，默认是5秒钟刷新一次，估计是调用flush系统调用把缓冲区中的数据写入到磁盘进行持久化
 var logFlushFreq = pflag.Duration("log-flush-frequency", 5*time.Second, "Maximum number of seconds between log flushes")
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	klog.InitFlags(nil)
 
+	// volcano可以配置的参数初始化
 	s := options.NewServerOption()
 	s.AddFlags(pflag.CommandLine)
 
@@ -54,10 +56,12 @@ func main() {
 	if s.PrintVersion {
 		version.PrintVersionAndExit()
 	}
+	// 检查参数
 	if err := s.CheckOptionOrDie(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
+	// 校验证书
 	if s.CaCertFile != "" && s.CertFile != "" && s.KeyFile != "" {
 		if err := s.ParseCAFiles(nil); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to parse CA file: %v\n", err)
@@ -66,7 +70,9 @@ func main() {
 	}
 
 	// The default klog flush interval is 30 seconds, which is frighteningly long.
+	// 持久化日志
 	go wait.Until(klog.Flush, *logFlushFreq, wait.NeverStop)
+	// 最后退出的时候，可能内存中还有日志没有刷新到磁盘，因此这里在退出的时候还需要在执行一次，防止日志信息的丢失
 	defer klog.Flush()
 
 	if err := app.Run(s); err != nil {

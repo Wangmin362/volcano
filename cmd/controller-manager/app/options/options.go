@@ -77,26 +77,39 @@ func NewServerOption() *ServerOption {
 
 // AddFlags adds flags for a specific CMServer to the specified FlagSet.
 func (s *ServerOption) AddFlags(fs *pflag.FlagSet) {
+	// APIServer的地址，若单独部署，则一般需要这个参数来指定
 	fs.StringVar(&s.KubeClientOptions.Master, "master", s.KubeClientOptions.Master, "The address of the Kubernetes API server (overrides any value in kubeconfig)")
+	// Kubeconfig路径，若一Pod的方式部署Volcano，那么一般就是配置这种方式
 	fs.StringVar(&s.KubeClientOptions.KubeConfig, "kubeconfig", s.KubeClientOptions.KubeConfig, "Path to kubeconfig file with authorization and master location information.")
+	// CA文件
 	fs.StringVar(&s.CaCertFile, "ca-cert-file", s.CaCertFile, "File containing the x509 Certificate for HTTPS.")
+	// 证书我呢见
 	fs.StringVar(&s.CertFile, "tls-cert-file", s.CertFile, ""+
 		"File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated "+
 		"after server cert).")
+	// 私钥文件
 	fs.StringVar(&s.KeyFile, "tls-private-key-file", s.KeyFile, "File containing the default x509 private key matching --tls-cert-file.")
 	fs.BoolVar(&s.EnableLeaderElection, "leader-elect", true, "Start a leader election client and gain leadership before "+
 		"executing the main loop. Enable this when running replicated vc-controller-manager for high availability; it is enabled by default")
+	// TODO 这玩意拿来干嘛？ 默认是volcano-system
 	fs.StringVar(&s.LockObjectNamespace, "lock-object-namespace", defaultLockObjectNamespace, "Define the namespace of the lock object; it is volcano-system by default")
+	// client-go查询apiserver限制
 	fs.Float32Var(&s.KubeClientOptions.QPS, "kube-api-qps", defaultQPS, "QPS to use while talking with kubernetes apiserver")
+	// client-go查询apiserver限制
 	fs.IntVar(&s.KubeClientOptions.Burst, "kube-api-burst", defaultBurst, "Burst to use while talking with kubernetes apiserver")
+	// 获取当前Volcano版本
 	fs.BoolVar(&s.PrintVersion, "version", false, "Show version and quit")
+	// TODO 工作线程，估计是用来处理Job的协程数量
 	fs.Uint32Var(&s.WorkerThreads, "worker-threads", defaultWorkers, "The number of threads syncing job operations concurrently. "+
 		"Larger number = faster job updating, but more CPU load")
+	// 默认调度器的名字
 	fs.StringArrayVar(&s.SchedulerNames, "scheduler-name", []string{defaultSchedulerName}, "Volcano will handle pods whose .spec.SchedulerName is same as scheduler-name")
+	// 任务，队列，命令在被丢弃之前，重新放入到队列的最大次数
 	fs.IntVar(&s.MaxRequeueNum, "max-requeue-num", defaultMaxRequeueNum, "The number of times a job, queue or command will be requeued before it is dropped out of the queue")
 	fs.StringVar(&s.HealthzBindAddress, "healthz-address", defaultHealthzAddress, "The address to listen on for the health check server.")
 	fs.BoolVar(&s.EnableHealthz, "enable-healthz", false, "Enable the health check; it is false by default")
 	fs.BoolVar(&s.InheritOwnerAnnotations, "inherit-owner-annotations", true, "Enable inherit owner annotations for pods when create podgroup; it is enabled by default")
+	// podgroup工作协程的数量
 	fs.Uint32Var(&s.WorkerThreadsForPG, "worker-threads-for-podgroup", defaultPodGroupWorkers, "The number of threads syncing podgroup operations. The larger the number, the faster the podgroup processing, but requires more CPU load.")
 }
 

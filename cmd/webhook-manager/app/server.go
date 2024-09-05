@@ -41,12 +41,12 @@ import (
 
 // Run start the service of admission controller.
 func Run(config *options.Config) error {
-	if config.PrintVersion {
+	if config.PrintVersion { // 打印版本信息并退出
 		version.PrintVersionAndExit()
 		return nil
 	}
 
-	if config.EnableHealthz {
+	if config.EnableHealthz { // 健康检测
 		if err := helpers.StartHealthz(config.HealthzBindAddress, "volcano-admission", config.CaCertData, config.CertData, config.KeyData); err != nil {
 			return err
 		}
@@ -56,11 +56,13 @@ func Run(config *options.Config) error {
 		return fmt.Errorf("failed to start webhooks as both 'url' and 'namespace/name' of webhook are empty")
 	}
 
+	// 构建APIServer客户端
 	restConfig, err := kube.BuildConfig(config.KubeClientOptions)
 	if err != nil {
 		return fmt.Errorf("unable to build k8s config: %v", err)
 	}
 
+	// 加载准入配置，当前Webhook对于什么名称空间的什么资源感兴趣
 	admissionConf := wkconfig.LoadAdmissionConf(config.ConfigPath)
 	if admissionConf == nil {
 		klog.Errorf("loadAdmissionConf failed.")
@@ -84,6 +86,7 @@ func Run(config *options.Config) error {
 		}
 
 		klog.V(3).Infof("Registered '%s' as webhook.", service.Path)
+		// TODO 这里配置了路径，以及该相对应的处理函数
 		http.HandleFunc(service.Path, service.Handler)
 
 		klog.V(3).Infof("Add CaCert for webhook <%s>", service.Path)
@@ -101,6 +104,7 @@ func Run(config *options.Config) error {
 	stopChannel := make(chan os.Signal, 1)
 	signal.Notify(stopChannel, syscall.SIGTERM, syscall.SIGINT)
 
+	// 本质上，webhook就是一个Webserver
 	server := &http.Server{
 		Addr:      config.ListenAddress + ":" + strconv.Itoa(config.Port),
 		TLSConfig: configTLS(config, restConfig),

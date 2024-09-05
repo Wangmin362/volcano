@@ -51,6 +51,7 @@ type Config struct {
 	SchedulerNames    []string
 	WebhookURL        string
 	ConfigPath        string
+	// 一般配置为 --enabled-admission=/jobs/mutate,/jobs/validate,/podgroups/mutate,/pods/validate,/pods/mutate,/queues/mutate,/queues/validate
 	EnabledAdmission  string
 	IgnoredNamespaces string
 

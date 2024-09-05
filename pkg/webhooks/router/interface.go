@@ -42,8 +42,10 @@ type AdmissionService struct {
 	Func    AdmitFunc
 	Handler AdmissionHandler
 
+	// 校验配置，用于配置对于什么资源的什么动作生效
 	ValidatingConfig *whv1.ValidatingWebhookConfiguration
-	MutatingConfig   *whv1.MutatingWebhookConfiguration
+	// 修改配置，用于配置对于什么资源的什么动作生效
+	MutatingConfig *whv1.MutatingWebhookConfiguration
 
 	Config *AdmissionServiceConfig
 }

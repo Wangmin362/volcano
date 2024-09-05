@@ -50,6 +50,7 @@ const (
 
 // Run the controller.
 func Run(opt *options.ServerOption) error {
+	// client-go客户端工具，用于和APIServer交互
 	config, err := kube.BuildConfig(opt.KubeClientOptions)
 	if err != nil {
 		return err
@@ -61,6 +62,7 @@ func Run(opt *options.ServerOption) error {
 		}
 	}
 
+	// TODO 启动控制器
 	run := startControllers(config, opt)
 
 	ctx := signals.SetupSignalContext()
@@ -70,6 +72,7 @@ func Run(opt *options.ServerOption) error {
 		return fmt.Errorf("finished without leader elect")
 	}
 
+	// leader选举，volcano可以启动多个实例，但是多个实例只有一个在运行，其它实例处于等待状态
 	leaderElectionClient, err := kubeclientset.NewForConfig(rest.AddUserAgent(config, "leader-election"))
 	if err != nil {
 		return err
@@ -124,6 +127,7 @@ func startControllers(config *rest.Config, opt *options.ServerOption) func(ctx c
 
 	// TODO: add user agent for different controllers
 	controllerOpt.KubeClient = kubeclientset.NewForConfigOrDie(config)
+	// TODO 这玩意是用来干嘛的？
 	controllerOpt.VolcanoClient = vcclientset.NewForConfigOrDie(config)
 	controllerOpt.SharedInformerFactory = informers.NewSharedInformerFactory(controllerOpt.KubeClient, 0)
 	controllerOpt.InheritOwnerAnnotations = opt.InheritOwnerAnnotations
