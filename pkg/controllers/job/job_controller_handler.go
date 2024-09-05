@@ -67,7 +67,9 @@ func (cc *jobcontroller) addJob(obj interface{}) {
 			job.Namespace, job.Name, err)
 	}
 	key := jobhelpers.GetJobKeyByReq(&req)
+	// 获取队列
 	queue := cc.getWorkerQueue(key)
+	// 把当前的job放入到队列当中
 	queue.Add(req)
 }
 
@@ -85,6 +87,7 @@ func (cc *jobcontroller) updateJob(oldObj, newObj interface{}) {
 	}
 
 	// No need to update if ResourceVersion is not changed
+	// TODO 什么时候一个Job触发了更新事件，但是版本没有变更？
 	if newJob.ResourceVersion == oldJob.ResourceVersion {
 		klog.V(6).Infof("No need to update because job is not modified.")
 		return
@@ -97,6 +100,7 @@ func (cc *jobcontroller) updateJob(oldObj, newObj interface{}) {
 
 	// NOTE: Since we only reconcile job based on Spec, we will ignore other attributes
 	// For Job status, it's used internally and always been updated via our controller.
+	// 如果Job根本就没有变化，直接忽略
 	if reflect.DeepEqual(newJob.Spec, oldJob.Spec) && newJob.Status.State.Phase == oldJob.Status.State.Phase {
 		klog.V(6).Infof("Job update event is ignored since no update in 'Spec'.")
 		return

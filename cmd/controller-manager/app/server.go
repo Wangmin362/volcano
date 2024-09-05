@@ -62,9 +62,10 @@ func Run(opt *options.ServerOption) error {
 		}
 	}
 
-	// TODO 启动控制器
+	// TODO 启动控制器 内部应该就是在处理Queue, Job资源，尤其是Job资源的处理
 	run := startControllers(config, opt)
 
+	// 注册SIGINT, SIGTERM信号，当接收到这两个信号时，退出协程，释放资源
 	ctx := signals.SetupSignalContext()
 
 	if !opt.EnableLeaderElection {
@@ -79,6 +80,7 @@ func Run(opt *options.ServerOption) error {
 	}
 
 	// Prepare event clients.
+	// TODO 事件相关
 	broadcaster := record.NewBroadcaster()
 	broadcaster.StartRecordingToSink(&corev1.EventSinkImpl{Interface: leaderElectionClient.CoreV1().Events(opt.LockObjectNamespace)})
 	eventRecorder := broadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "vc-controller-manager"})
@@ -90,6 +92,7 @@ func Run(opt *options.ServerOption) error {
 	// add a uniquifier so that two processes on the same host don't accidentally both become active
 	id := hostname + "_" + string(uuid.NewUUID())
 
+	// TODO 这玩意干嘛的？  根据后面的使用情况可以看出来是跟leader选举相关的东西，暂时忽略
 	rl, err := resourcelock.New(resourcelock.LeasesResourceLock,
 		opt.LockObjectNamespace,
 		"vc-controller-manager",
@@ -109,7 +112,7 @@ func Run(opt *options.ServerOption) error {
 		RenewDeadline: renewDeadline,
 		RetryPeriod:   retryPeriod,
 		Callbacks: leaderelection.LeaderCallbacks{
-			OnStartedLeading: run,
+			OnStartedLeading: run, // 只有leader才有资格执行run方法
 			OnStoppedLeading: func() {
 				klog.Fatalf("leaderelection lost")
 			},
@@ -122,6 +125,7 @@ func startControllers(config *rest.Config, opt *options.ServerOption) func(ctx c
 	controllerOpt := &framework.ControllerOption{}
 
 	controllerOpt.SchedulerNames = opt.SchedulerNames
+	// TODO 可以简单理解为Job资源的worker数量
 	controllerOpt.WorkerNum = opt.WorkerThreads
 	controllerOpt.MaxRequeueNum = opt.MaxRequeueNum
 
@@ -130,16 +134,21 @@ func startControllers(config *rest.Config, opt *options.ServerOption) func(ctx c
 	// TODO 这玩意是用来干嘛的？
 	controllerOpt.VolcanoClient = vcclientset.NewForConfigOrDie(config)
 	controllerOpt.SharedInformerFactory = informers.NewSharedInformerFactory(controllerOpt.KubeClient, 0)
+	// 用于设置pod是否继承PodGroup资源的注解，默认是继承注解的
 	controllerOpt.InheritOwnerAnnotations = opt.InheritOwnerAnnotations
+	// 处理PodGroup资源的worker数量
 	controllerOpt.WorkerThreadsForPG = opt.WorkerThreadsForPG
 
 	return func(ctx context.Context) {
+		// TODO 会启动哪些controller?
 		framework.ForeachController(func(c framework.Controller) {
+			// 初始化controller
 			if err := c.Initialize(controllerOpt); err != nil {
 				klog.Errorf("Failed to initialize controller <%s>: %v", c.Name(), err)
 				return
 			}
 
+			// 运行controller
 			go c.Run(ctx.Done())
 		})
 

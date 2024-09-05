@@ -55,13 +55,15 @@ type ServerOption struct {
 	// With the current rate-limiter in use (5ms*2^(maxRetries-1)) the following numbers represent the times
 	// a job, queue or command is going to be requeued:
 	// 5ms, 10ms, 20ms, 40ms, 80ms, 160ms, 320ms, 640ms, 1.3s, 2.6s, 5.1s, 10.2s, 20.4s, 41s, 82s
-	MaxRequeueNum  int
+	MaxRequeueNum int
+	// 可以给一个调度器设置多个名字
 	SchedulerNames []string
 	// HealthzBindAddress is the IP address and port for the health check server to serve on,
 	// defaulting to 0.0.0.0:11251
 	HealthzBindAddress string
 	EnableHealthz      bool
 	// To determine whether inherit owner's annotations for pods when create podgroup
+	// 用于设置pod是否继承PodGroup资源的注解，默认是继承注解的
 	InheritOwnerAnnotations bool
 	// WorkerThreadsForPG is the number of threads syncing podgroup operations
 	// The larger the number, the faster the podgroup processing, but requires more CPU load.
@@ -108,6 +110,7 @@ func (s *ServerOption) AddFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&s.MaxRequeueNum, "max-requeue-num", defaultMaxRequeueNum, "The number of times a job, queue or command will be requeued before it is dropped out of the queue")
 	fs.StringVar(&s.HealthzBindAddress, "healthz-address", defaultHealthzAddress, "The address to listen on for the health check server.")
 	fs.BoolVar(&s.EnableHealthz, "enable-healthz", false, "Enable the health check; it is false by default")
+	// TODO 这玩意是当PodGroup创建Pod资源是，用于设置Pod资源是否继承PodGroup资源的注解，默认是继承的
 	fs.BoolVar(&s.InheritOwnerAnnotations, "inherit-owner-annotations", true, "Enable inherit owner annotations for pods when create podgroup; it is enabled by default")
 	// podgroup工作协程的数量
 	fs.Uint32Var(&s.WorkerThreadsForPG, "worker-threads-for-podgroup", defaultPodGroupWorkers, "The number of threads syncing podgroup operations. The larger the number, the faster the podgroup processing, but requires more CPU load.")

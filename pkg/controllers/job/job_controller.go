@@ -63,8 +63,8 @@ func init() {
 
 // jobcontroller the Job jobcontroller type.
 type jobcontroller struct {
-	kubeClient kubernetes.Interface
-	vcClient   vcclientset.Interface
+	kubeClient kubernetes.Interface  // 用于查询K8S定义的标准资源
+	vcClient   vcclientset.Interface // 用于查询volcano定义的CRD资源
 
 	jobInformer   batchinformer.JobInformer
 	podInformer   coreinformers.PodInformer
@@ -75,7 +75,9 @@ type jobcontroller struct {
 	pcInformer    kubeschedulinginformers.PriorityClassInformer
 	queueInformer schedulinginformers.QueueInformer
 
-	informerFactory   informers.SharedInformerFactory
+	// 缓存k8s定义的资源
+	informerFactory informers.SharedInformerFactory
+	// 缓存volcano定义的资源
 	vcInformerFactory vcinformer.SharedInformerFactory
 
 	// A store of jobs
@@ -107,9 +109,12 @@ type jobcontroller struct {
 	queueSynced func() bool
 
 	// queue that need to sync up
-	queueList    []workqueue.RateLimitingInterface
+	// 限速队列 + 延时队列
+	queueList []workqueue.RateLimitingInterface
+	// TODO 命令队列是用来干嘛的？
 	commandQueue workqueue.RateLimitingInterface
-	cache        jobcache.Cache
+	// 用于缓存Job信息
+	cache jobcache.Cache
 	// Job Event recorder
 	recorder record.EventRecorder
 
@@ -136,6 +141,7 @@ func (cc *jobcontroller) Initialize(opt *framework.ControllerOption) error {
 	recorder := eventBroadcaster.NewRecorder(vcscheme.Scheme, v1.EventSource{Component: "vc-controller-manager"})
 
 	cc.informerFactory = sharedInformers
+	// TODO 每个worker一个队列么？
 	cc.queueList = make([]workqueue.RateLimitingInterface, workers)
 	cc.commandQueue = workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
 	cc.cache = jobcache.New()
@@ -147,17 +153,17 @@ func (cc *jobcontroller) Initialize(opt *framework.ControllerOption) error {
 		cc.maxRequeueNum = -1
 	}
 
-	var i uint32
-	for i = 0; i < workers; i++ {
+	for i := uint32(0); i < workers; i++ {
 		cc.queueList[i] = workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
 	}
 
+	// 缓存volcano相关的资源信息
 	factory := informerfactory.NewSharedInformerFactory(cc.vcClient, 0)
 	cc.vcInformerFactory = factory
 	if utilfeature.DefaultFeatureGate.Enabled(features.WorkLoadSupport) {
 		cc.jobInformer = factory.Batch().V1alpha1().Jobs()
 		cc.jobInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc:    cc.addJob,
+			AddFunc:    cc.addJob, // 处理Job的新增
 			UpdateFunc: cc.updateJob,
 			DeleteFunc: cc.deleteJob,
 		})
@@ -228,6 +234,7 @@ func (cc *jobcontroller) Initialize(opt *framework.ControllerOption) error {
 	cc.queueSynced = cc.queueInformer.Informer().HasSynced
 
 	// Register actions
+	// TODO 这俩玩意啥时候被调用？
 	state.SyncJob = cc.syncJob
 	state.KillJob = cc.killJob
 
@@ -253,11 +260,11 @@ func (cc *jobcontroller) Run(stopCh <-chan struct{}) {
 		}
 	}
 
+	// 处理命令
 	go wait.Until(cc.handleCommands, 0, stopCh)
-	var i uint32
-	for i = 0; i < cc.workers; i++ {
+	for i := uint32(0); i < cc.workers; i++ {
 		go func(num uint32) {
-			wait.Until(
+			wait.Until( // 每秒钟执行一次，直到停止信号
 				func() {
 					cc.worker(num)
 				},
@@ -297,6 +304,8 @@ func (cc *jobcontroller) getWorkerQueue(key string) workqueue.RateLimitingInterf
 	var hashVal hash.Hash32
 	var val uint32
 
+	// 计算哈希值，每个job通过哈希运算，进入固定的queue当中
+	// TODO 显然，这里的哈希函数因该尽可能的Job均摊到不同的队列当中
 	hashVal = fnv.New32()
 	hashVal.Write([]byte(key))
 
@@ -319,6 +328,7 @@ func (cc *jobcontroller) processNextReq(count uint32) bool {
 	defer queue.Done(req)
 
 	key := jobcache.JobKeyByReq(&req)
+	// 判断当前worker是否应该处理这个Job，其实之前的哈希函数只要确保了计算正确，这里一般都不会改变
 	if !cc.belongsToThisRoutine(key, count) {
 		klog.Errorf("should not occur The job does not belongs to this routine key:%s, worker:%d...... ", key, count)
 		queueLocal := cc.getWorkerQueue(key)
@@ -328,6 +338,7 @@ func (cc *jobcontroller) processNextReq(count uint32) bool {
 
 	klog.V(3).Infof("Try to handle request <%v>", req)
 
+	// 获取当前job的jobInfo
 	jobInfo, err := cc.cache.Get(key)
 	if err != nil {
 		// TODO(k82cn): ignore not-ready error.
@@ -369,6 +380,7 @@ func (cc *jobcontroller) processNextReq(count uint32) bool {
 	}
 
 	// If no error, forget it.
+	// 如果没有错误，说明当前Job已经处理完成
 	queue.Forget(req)
 
 	return true

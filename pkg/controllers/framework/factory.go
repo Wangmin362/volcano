@@ -22,6 +22,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// TODO 这里注册了哪些controller?
 var controllers = map[string]Controller{}
 
 // ForeachController is helper function to operator all controllers.
@@ -32,11 +33,13 @@ func ForeachController(fn func(controller Controller)) {
 }
 
 // RegisterController register controller to the controller manager.
+// 注册Controller，这些Controller将会处理自己关心的资源
 func RegisterController(ctrl Controller) error {
 	if ctrl == nil {
 		return fmt.Errorf("controller is nil")
 	}
 
+	// 不能重复注册相同名称的Controller
 	if _, found := controllers[ctrl.Name()]; found {
 		return fmt.Errorf("duplicated controller")
 	}

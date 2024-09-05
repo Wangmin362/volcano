@@ -38,6 +38,8 @@ import (
 )
 
 func init() {
+	// 1、这里直接实例化一个GC Controller，注册到Framework中
+	// 2、Controller的初始化完全不需要担心，因为Framework将来在启动Controller的时候会自动调用Initialize方法
 	framework.RegisterController(&gccontroller{})
 }
 
@@ -50,6 +52,10 @@ func init() {
 // worker will send requests to the API server to delete the Jobs accordingly.
 // This is implemented outside of Job controller for separation of concerns, and
 // because it will be extended to handle other finishable resource types.
+// 1、GC Controller的目标非常简单：删除掉哪些已经完成的Job资源，并且这些Job的TTL已经过期，这种类型的Job资源就会被删除。
+// 2、在K8S当中，每一种资源实际上都被持久化到后端的ETCD当中，所以是需要占用ETCD的资源的，当集群单中存在大量已经完成的Job，
+// 如果不及时清理这些Job，势必会给ETCD带来性能问题，从而影响整个集群的稳定性、健壮性。
+// 3、根据注释，GC Controller目前只会回收Job资源。
 type gccontroller struct {
 	vcClient vcclientset.Interface
 
@@ -74,6 +80,7 @@ func (gc *gccontroller) Initialize(opt *framework.ControllerOption) error {
 	gc.vcClient = opt.VolcanoClient
 
 	factory := informerfactory.NewSharedInformerFactory(gc.vcClient, 0)
+	// 关心Job资源的变化
 	jobInformer := factory.Batch().V1alpha1().Jobs()
 
 	gc.vcInformerFactory = factory
@@ -82,6 +89,7 @@ func (gc *gccontroller) Initialize(opt *framework.ControllerOption) error {
 	gc.jobSynced = jobInformer.Informer().HasSynced
 	gc.queue = workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
 
+	// GC Controller的目标就是清理已经完成的并且过期的Job，因此如果用户手动删除的Job资源，我肯定是不需要关心的
 	jobInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    gc.addJob,
 		UpdateFunc: gc.updateJob,
@@ -114,7 +122,9 @@ func (gc *gccontroller) addJob(obj interface{}) {
 	job := obj.(*v1alpha1.Job)
 	klog.V(4).Infof("Adding job %s/%s", job.Namespace, job.Name)
 
+	// 如果Job已经完成，并且设置了TTL，那么就需要清除
 	if job.DeletionTimestamp == nil && needsCleanup(job) {
+		// 如果一个Job需要被清除，就入队
 		gc.enqueue(job)
 	}
 }
@@ -183,6 +193,7 @@ func (gc *gccontroller) handleErr(err error, key interface{}) {
 // to expire.
 // This function is not meant to be invoked concurrently with the same key.
 func (gc *gccontroller) processJob(key string) error {
+	// 获取当前Job的名称空间和名字
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		return err
@@ -190,8 +201,9 @@ func (gc *gccontroller) processJob(key string) error {
 
 	klog.V(4).Infof("Checking if Job %s/%s is ready for cleanup", namespace, name)
 	// Ignore the Jobs that are already deleted or being deleted, or the ones that don't need clean up.
+	// 查询Job
 	job, err := gc.jobLister.Jobs(namespace).Get(name)
-	if errors.IsNotFound(err) {
+	if errors.IsNotFound(err) { // 如果找不到了，说明被删了
 		return nil
 	}
 	if err != nil {
@@ -201,6 +213,8 @@ func (gc *gccontroller) processJob(key string) error {
 	if expired, err := gc.processTTL(job); err != nil {
 		return err
 	} else if !expired {
+		// 1、如果当前Job没有过期，直接返回，不进行后续的流程。
+		// 2、TODO 这里为什么不设计一个类似小端堆的数据结构，这样就不需要一遍遍的轮询这个队列
 		return nil
 	}
 
@@ -208,6 +222,7 @@ func (gc *gccontroller) processJob(key string) error {
 	// Before deleting the Job, do a final sanity check.
 	// If TTL is modified before we do this check, we cannot be sure if the TTL truly expires.
 	// The latest Job may have a different UID, but it's fine because the checks will be run again.
+	// TODO 我猜测这里是直接查询的APIServer，再次看看TTL是否过期，因为很有可能缓存中不是最新的
 	fresh, err := gc.vcClient.BatchV1alpha1().Jobs(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		return nil
@@ -222,6 +237,7 @@ func (gc *gccontroller) processJob(key string) error {
 		return nil
 	}
 	// Cascade deletes the Jobs if TTL truly expires.
+	// 级联删除，Job删除之后，与Job关联的PodGroup, Pod都需要删除
 	policy := metav1.DeletePropagationForeground
 	options := metav1.DeleteOptions{
 		PropagationPolicy: &policy,
@@ -255,6 +271,7 @@ func (gc *gccontroller) processTTL(job *v1alpha1.Job) (expired bool, err error) 
 }
 
 // needsCleanup checks whether a Job has finished and has a TTL set.
+// 如果Job已经完成，并且设置了TTL，那么就需要清除
 func needsCleanup(j *v1alpha1.Job) bool {
 	return j.Spec.TTLSecondsAfterFinished != nil && isJobFinished(j)
 }

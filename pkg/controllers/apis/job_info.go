@@ -26,10 +26,11 @@ import (
 
 // JobInfo struct.
 type JobInfo struct {
-	Namespace string
-	Name      string
+	Namespace string // job所在名称空间
+	Name      string // job名字
 
-	Job  *batch.Job
+	Job *batch.Job // job信息
+	// Job管理的Pod，一级为task名字，二级为pod名字
 	Pods map[string]map[string]*v1.Pod
 }
 

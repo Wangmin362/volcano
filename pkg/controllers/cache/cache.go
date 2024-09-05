@@ -139,7 +139,7 @@ func (jc *jobCache) Add(job *v1alpha1.Job) error {
 		Namespace: job.Namespace,
 
 		Job:  job,
-		Pods: make(map[string]map[string]*v1.Pod),
+		Pods: make(map[string]map[string]*v1.Pod), // 一级的key为task名字，二级的key为pod名字
 	}
 
 	return nil
