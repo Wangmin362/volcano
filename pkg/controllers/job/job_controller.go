@@ -200,7 +200,7 @@ func (cc *jobcontroller) Initialize(opt *framework.ControllerOption) error {
 
 	cc.podInformer = sharedInformers.Core().V1().Pods()
 	cc.podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    cc.addPod,
+		AddFunc:    cc.addPod, // Pod资源的变化也需要更新到Job资源
 		UpdateFunc: cc.updatePod,
 		DeleteFunc: cc.deletePod,
 	})
@@ -218,7 +218,7 @@ func (cc *jobcontroller) Initialize(opt *framework.ControllerOption) error {
 
 	cc.pgInformer = factory.Scheduling().V1beta1().PodGroups()
 	cc.pgInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		UpdateFunc: cc.updatePodGroup,
+		UpdateFunc: cc.updatePodGroup, // PodGroup资源的变化可有可能需要更新到Job资源的状态
 	})
 	cc.pgLister = cc.pgInformer.Lister()
 	cc.pgSynced = cc.pgInformer.Informer().HasSynced
@@ -234,8 +234,9 @@ func (cc *jobcontroller) Initialize(opt *framework.ControllerOption) error {
 	cc.queueSynced = cc.queueInformer.Informer().HasSynced
 
 	// Register actions
-	// TODO 这俩玩意啥时候被调用？
+	// 同步Job的状态
 	state.SyncJob = cc.syncJob
+	// 杀死Job
 	state.KillJob = cc.killJob
 
 	return nil
@@ -246,6 +247,7 @@ func (cc *jobcontroller) Run(stopCh <-chan struct{}) {
 	cc.informerFactory.Start(stopCh)
 	cc.vcInformerFactory.Start(stopCh)
 
+	// 等待K8S的资源同步完成
 	for informerType, ok := range cc.informerFactory.WaitForCacheSync(stopCh) {
 		if !ok {
 			klog.Errorf("caches failed to sync: %v", informerType)
@@ -253,6 +255,7 @@ func (cc *jobcontroller) Run(stopCh <-chan struct{}) {
 		}
 	}
 
+	// 等待volcano资源同步完成
 	for informerType, ok := range cc.vcInformerFactory.WaitForCacheSync(stopCh) {
 		if !ok {
 			klog.Errorf("caches failed to sync: %v", informerType)
@@ -266,6 +269,7 @@ func (cc *jobcontroller) Run(stopCh <-chan struct{}) {
 		go func(num uint32) {
 			wait.Until( // 每秒钟执行一次，直到停止信号
 				func() {
+					// 处理Job资源的变化
 					cc.worker(num)
 				},
 				time.Second,
@@ -346,6 +350,7 @@ func (cc *jobcontroller) processNextReq(count uint32) bool {
 		return true
 	}
 
+	// 获取Job的状态
 	st := state.NewState(jobInfo)
 	if st == nil {
 		klog.Errorf("Invalid state <%s> of Job <%v/%v>",
@@ -353,6 +358,7 @@ func (cc *jobcontroller) processNextReq(count uint32) bool {
 		return true
 	}
 
+	// TODO 获取Job的Action
 	action := applyPolicies(jobInfo.Job, &req)
 	klog.V(3).Infof("Execute <%v> on Job <%s/%s> in <%s> by <%T>.",
 		action, req.Namespace, req.JobName, jobInfo.Job.Status.State.Phase, st)

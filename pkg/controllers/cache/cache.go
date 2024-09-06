@@ -36,7 +36,7 @@ import (
 type jobCache struct {
 	sync.Mutex
 
-	jobs        map[string]*apis.JobInfo
+	jobs        map[string]*apis.JobInfo // key为job名字
 	deletedJobs workqueue.RateLimitingInterface
 }
 

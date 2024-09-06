@@ -58,6 +58,7 @@ func (cc *jobcontroller) pluginOnJobAdd(job *batch.Job) error {
 			return err
 		}
 		klog.Infof("Starting to execute plugin at <pluginOnJobAdd>: %s on job: <%s/%s>", name, job.Namespace, job.Name)
+		// 当前需要创建Job，因此需要调用插件的OnJobAdd方法
 		if err := pb(client, args).OnJobAdd(job); err != nil {
 			klog.Errorf("Failed to process on job add plugin %s, err %v.", name, err)
 			return err

@@ -29,6 +29,7 @@ type PluginClientset struct {
 }
 
 // PluginInterface interface.
+// 可以看到，插件可以再下面几个生命周期阶段起作用
 type PluginInterface interface {
 	// Name returns the unique name of Plugin.
 	Name() string
