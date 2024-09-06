@@ -70,6 +70,7 @@ func (pg *pgcontroller) addReplicaSet(obj interface{}) {
 		return
 	}
 
+	// TODO 从这里似乎可以看出来PodGroup资源和ReplicaSet资源有某种关联
 	if *rs.Spec.Replicas == 0 {
 		pgName := batchv1alpha1.PodgroupNamePrefix + string(rs.UID)
 		err := pg.vcClient.SchedulingV1beta1().PodGroups(rs.Namespace).Delete(context.TODO(), pgName, metav1.DeleteOptions{})
@@ -87,6 +88,8 @@ func (pg *pgcontroller) updatePodAnnotations(pod *v1.Pod, pgName string) error {
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
+
+	// 获取"scheduling.k8s.io/group-name"组名字
 	if pod.Annotations[scheduling.KubeGroupNameAnnotationKey] == "" {
 		patch := metadataForMergePatch{
 			Metadata: annotationForMergePatch{
@@ -102,7 +105,9 @@ func (pg *pgcontroller) updatePodAnnotations(pod *v1.Pod, pgName string) error {
 			return err
 		}
 
-		if _, err := pg.kubeClient.CoreV1().Pods(pod.Namespace).Patch(context.TODO(), pod.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{}); err != nil {
+		// 更新Pod注解
+		if _, err := pg.kubeClient.CoreV1().Pods(pod.Namespace).
+			Patch(context.TODO(), pod.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{}); err != nil {
 			klog.Errorf("Failed to update pod <%s/%s>: %v", pod.Namespace, pod.Name, err)
 			return err
 		}
@@ -167,8 +172,10 @@ func (pg *pgcontroller) inheritUpperAnnotations(pod *v1.Pod, obj *scheduling.Pod
 }
 
 func (pg *pgcontroller) createNormalPodPGIfNotExist(pod *v1.Pod) error {
+	// 生成PodGroup资源的名字
 	pgName := helpers.GeneratePodgroupName(pod)
 
+	// 查询生成的PodGroup名字是否已经存在
 	if _, err := pg.pgLister.PodGroups(pod.Namespace).Get(pgName); err != nil {
 		if !apierrors.IsNotFound(err) {
 			klog.Errorf("Failed to get normal PodGroup for Pod <%s/%s>: %v",
@@ -176,6 +183,9 @@ func (pg *pgcontroller) createNormalPodPGIfNotExist(pod *v1.Pod) error {
 			return err
 		}
 
+		// 到了这里，说明当前K8S中确实不存在这个PodGroup资源
+
+		// 生成PodGroup资源
 		obj := &scheduling.PodGroup{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace:       pod.Namespace,
@@ -200,6 +210,7 @@ func (pg *pgcontroller) createNormalPodPGIfNotExist(pod *v1.Pod) error {
 			obj.Spec.Queue = queueName
 		}
 
+		// 是否允许抢占
 		if value, ok := pod.Annotations[scheduling.PodPreemptable]; ok {
 			obj.Annotations[scheduling.PodPreemptable] = value
 		}
@@ -222,6 +233,7 @@ func (pg *pgcontroller) createNormalPodPGIfNotExist(pod *v1.Pod) error {
 			obj.Annotations[scheduling.JDBMaxUnavailable] = value
 		}
 
+		// 创建PodGroup
 		if _, err := pg.vcClient.SchedulingV1beta1().PodGroups(pod.Namespace).Create(context.TODO(), obj, metav1.CreateOptions{}); err != nil {
 			if !apierrors.IsAlreadyExists(err) {
 				klog.Errorf("Failed to create normal PodGroup for Pod <%s/%s>: %v",
@@ -231,6 +243,7 @@ func (pg *pgcontroller) createNormalPodPGIfNotExist(pod *v1.Pod) error {
 		}
 	}
 
+	// PodGroup资源创建成功，此时需要更新Pod某些注解
 	return pg.updatePodAnnotations(pod, pgName)
 }
 

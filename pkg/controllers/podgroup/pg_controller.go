@@ -44,6 +44,11 @@ func init() {
 }
 
 // pgcontroller the Podgroup pgcontroller type.
+// 1、监听Pod的Add事件，一旦发现有新增的Add事件，并且这个Pod调度器就是Volcano，那么判断这个Pod是否创建了对应的
+// PodGroup资源，如果没有创建PodGroup资源，那就创建PodGroup资源，同时更新Pod的注解，增加scheduling.k8s.io/group-name=<name>注解
+// 2、为什么每个Pod都需要创建对应的PodGroup呢？ 主要是因为Volcano中的调度单元就是PodGroup，所以需要为孤立的Pod创建PodGroup。
+// 实际上一般都是使用Job提交任务，此时最终创建的Pod已经添加了scheduling.k8s.io/group-name=<group>的注解，此时PodGroupController
+// 就不需要做额外的事情
 type pgcontroller struct {
 	kubeClient kubernetes.Interface
 	vcClient   vcclientset.Interface
@@ -66,6 +71,7 @@ type pgcontroller struct {
 	// A store of replicaset
 	rsSynced func() bool
 
+	// 用来存放queue
 	queue workqueue.RateLimitingInterface
 
 	schedulerNames []string
@@ -95,8 +101,9 @@ func (pg *pgcontroller) Initialize(opt *framework.ControllerOption) error {
 	pg.podInformer = opt.SharedInformerFactory.Core().V1().Pods()
 	pg.podLister = pg.podInformer.Lister()
 	pg.podSynced = pg.podInformer.Informer().HasSynced
+	// 似乎只有Pod的变化会更新到queue
 	pg.podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: pg.addPod,
+		AddFunc: pg.addPod, // 只关心Pod的事件
 	})
 
 	factory := informerfactory.NewSharedInformerFactory(pg.vcClient, 0)
@@ -105,6 +112,7 @@ func (pg *pgcontroller) Initialize(opt *framework.ControllerOption) error {
 	pg.pgLister = pg.pgInformer.Lister()
 	pg.pgSynced = pg.pgInformer.Informer().HasSynced
 
+	// TODO 从这里似乎可以看出来PodGroup资源和ReplicaSet资源有某种关联
 	if utilfeature.DefaultFeatureGate.Enabled(features.WorkLoadSupport) {
 		pg.rsInformer = pg.informerFactory.Apps().V1().ReplicaSets()
 		pg.rsSynced = pg.rsInformer.Informer().HasSynced
@@ -121,11 +129,13 @@ func (pg *pgcontroller) Run(stopCh <-chan struct{}) {
 	pg.informerFactory.Start(stopCh)
 	pg.vcInformerFactory.Start(stopCh)
 
+	// 等待K8S资源同步完成
 	for informerType, ok := range pg.informerFactory.WaitForCacheSync(stopCh) {
 		if !ok {
 			klog.Errorf("caches failed to sync: %v", informerType)
 		}
 	}
+	// 等待Volcano资源同步完成
 	for informerType, ok := range pg.vcInformerFactory.WaitForCacheSync(stopCh) {
 		if !ok {
 			klog.Errorf("caches failed to sync: %v", informerType)
@@ -133,6 +143,8 @@ func (pg *pgcontroller) Run(stopCh <-chan struct{}) {
 		}
 	}
 
+	// 启动指定数量的协程，消费队列中的PogGroup资源
+	// TODO 为什么这里的队列设计和Job中的队列设计不一样
 	for i := 0; i < int(pg.workers); i++ {
 		go wait.Until(pg.worker, 0, stopCh)
 	}
@@ -153,19 +165,22 @@ func (pg *pgcontroller) processNextReq() bool {
 	}
 
 	req := obj.(podRequest)
-	defer pg.queue.Done(req)
+	defer pg.queue.Done(req) // 如果处理过程中没有报错，则认为当前Pod处理完成，直接从队列中移除
 
+	// 从ShardInformer缓存当中查询Pod资源
 	pod, err := pg.podLister.Pods(req.podNamespace).Get(req.podName)
 	if err != nil {
 		klog.Errorf("Failed to get pod by <%v> from cache: %v", req, err)
 		return true
 	}
 
+	// 判断当前Pod指定的调度器是否是Volcano，如果不是直接跳过这个Pod
 	if !commonutil.Contains(pg.schedulerNames, pod.Spec.SchedulerName) {
 		klog.V(5).Infof("pod %v/%v field SchedulerName is not matched", pod.Namespace, pod.Name)
 		return true
 	}
 
+	// 判断当前Pod是否已经再某个组下面，如果Pod已经划分到了某个PodGroup下面，直接跳过
 	if pod.Annotations != nil && pod.Annotations[scheduling.KubeGroupNameAnnotationKey] != "" {
 		klog.V(5).Infof("pod %v/%v has created podgroup", pod.Namespace, pod.Name)
 		return true
@@ -174,6 +189,7 @@ func (pg *pgcontroller) processNextReq() bool {
 	// normal pod use volcano
 	if err := pg.createNormalPodPGIfNotExist(pod); err != nil {
 		klog.Errorf("Failed to handle Pod <%s/%s>: %v", pod.Namespace, pod.Name, err)
+		// 当前Pod处理出错了，重新放入到队列当中
 		pg.queue.AddRateLimited(req)
 		return true
 	}
