@@ -68,6 +68,7 @@ type gccontroller struct {
 	jobSynced func() bool
 
 	// queues that need to be updated.
+	// 队列，用于生产者消费者模型，缓存的Job的key,也就是namespace/name
 	queue workqueue.RateLimitingInterface
 }
 
@@ -105,7 +106,9 @@ func (gc *gccontroller) Run(stopCh <-chan struct{}) {
 	klog.Infof("Starting garbage collector")
 	defer klog.Infof("Shutting down garbage collector")
 
+	// 启动Informer，同步Job资源
 	gc.vcInformerFactory.Start(stopCh)
+	// 等待资源同步完成
 	for informerType, ok := range gc.vcInformerFactory.WaitForCacheSync(stopCh) {
 		if !ok {
 			klog.Errorf("caches failed to sync: %v", informerType)
@@ -169,6 +172,7 @@ func (gc *gccontroller) processNextWorkItem() bool {
 	if quit {
 		return false
 	}
+	// 没有啥错误的话，就认为这个Job已经处理完成
 	defer gc.queue.Done(key)
 
 	err := gc.processJob(key.(string))
@@ -201,7 +205,7 @@ func (gc *gccontroller) processJob(key string) error {
 
 	klog.V(4).Infof("Checking if Job %s/%s is ready for cleanup", namespace, name)
 	// Ignore the Jobs that are already deleted or being deleted, or the ones that don't need clean up.
-	// 查询Job
+	// 查询Job，从ShardInformer当中获取，也就是从缓存当中获取
 	job, err := gc.jobLister.Jobs(namespace).Get(name)
 	if errors.IsNotFound(err) { // 如果找不到了，说明被删了
 		return nil
@@ -222,7 +226,7 @@ func (gc *gccontroller) processJob(key string) error {
 	// Before deleting the Job, do a final sanity check.
 	// If TTL is modified before we do this check, we cannot be sure if the TTL truly expires.
 	// The latest Job may have a different UID, but it's fine because the checks will be run again.
-	// TODO 我猜测这里是直接查询的APIServer，再次看看TTL是否过期，因为很有可能缓存中不是最新的
+	// 这里是直接查询的APIServer，再次看看TTL是否过期，因为很有可能缓存中不是最新的
 	fresh, err := gc.vcClient.BatchV1alpha1().Jobs(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		return nil

@@ -59,6 +59,7 @@ func (c *queuecontroller) deleteQueue(obj interface{}) {
 
 	c.pgMutex.Lock()
 	defer c.pgMutex.Unlock()
+	// queue一旦删除，直接删除这个queue
 	delete(c.podGroups, queue.Name)
 }
 
@@ -82,7 +83,7 @@ func (c *queuecontroller) addPodGroup(obj interface{}) {
 		QueueName: pg.Spec.Queue,
 
 		Event:  busv1alpha1.OutOfSyncEvent,
-		Action: busv1alpha1.SyncQueueAction,
+		Action: busv1alpha1.SyncQueueAction, // 同步队列
 	}
 
 	c.enqueue(req)
@@ -119,6 +120,7 @@ func (c *queuecontroller) deletePodGroup(obj interface{}) {
 	c.pgMutex.Lock()
 	defer c.pgMutex.Unlock()
 
+	// podGroup的删除，只是影响Queue中的podGroup，不会影响当前的queue
 	delete(c.podGroups[pg.Spec.Queue], key)
 
 	req := &apis.Request{

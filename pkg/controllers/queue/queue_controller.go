@@ -78,11 +78,13 @@ type queuecontroller struct {
 	vcInformerFactory vcinformer.SharedInformerFactory
 
 	// queues that need to be updated.
-	queue        workqueue.RateLimitingInterface
+	queue workqueue.RateLimitingInterface
+	// TODO 这个队列干嘛的？
 	commandQueue workqueue.RateLimitingInterface
 
 	pgMutex sync.RWMutex
 	// queue name -> podgroup namespace/name
+	// 把podGroup通过不同的queue进行分组
 	podGroups map[string]map[string]struct{}
 
 	syncHandler        func(req *apis.Request) error
@@ -118,6 +120,7 @@ func (c *queuecontroller) Initialize(opt *framework.ControllerOption) error {
 	c.queueSynced = queueInformer.Informer().HasSynced
 	c.pgLister = pgInformer.Lister()
 	c.pgSynced = pgInformer.Informer().HasSynced
+	// 初始化限速队列，本质上还是一个延迟队列
 	c.queue = workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
 	c.commandQueue = workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
 	c.podGroups = make(map[string]map[string]struct{})
@@ -127,12 +130,15 @@ func (c *queuecontroller) Initialize(opt *framework.ControllerOption) error {
 		c.maxRequeueNum = -1
 	}
 
+	// queue的增删改
 	queueInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    c.addQueue,
 		UpdateFunc: c.updateQueue,
 		DeleteFunc: c.deleteQueue,
 	})
 
+	// podGroup资源的增删改，podGroup会和一个Queue关联，因此PodGroup资源的变化，体现的就是Queue中的PodGroup的变化，因此可以理解为
+	// Queue的变化
 	pgInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    c.addPodGroup,
 		UpdateFunc: c.updatePodGroup,
@@ -158,6 +164,7 @@ func (c *queuecontroller) Initialize(opt *framework.ControllerOption) error {
 		c.cmdSynced = c.cmdInformer.Informer().HasSynced
 	}
 
+	// 当Queue触发不同的事件的时候执行对应的处理函数
 	queuestate.SyncQueue = c.syncQueue
 	queuestate.OpenQueue = c.openQueue
 	queuestate.CloseQueue = c.closeQueue

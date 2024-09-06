@@ -63,6 +63,7 @@ func Run(opt *options.ServerOption) error {
 	}
 
 	// TODO 启动控制器 内部应该就是在处理Queue, Job资源，尤其是Job资源的处理
+	// 1、启动GC Controller，用于删除哪些已经完成的Job，并且Job设置了TTLSecondsAfterFinished参数，并且已经过期的Job
 	run := startControllers(config, opt)
 
 	// 注册SIGINT, SIGTERM信号，当接收到这两个信号时，退出协程，释放资源
