@@ -25,6 +25,7 @@ type succeedState struct {
 func (p *succeedState) Execute(action v1alpha1.Action) error {
 	switch action {
 	case v1alpha1.SyncJobFlowAction:
+		// Job已经处于Succeed状态后，说明所有的Job已经运行完成，此时不可能再有变化，因此啥也不用干
 		return SyncJobFlow(p.jobFlow, func(status *v1alpha1.JobFlowStatus, allJobList int) {})
 	}
 	return nil

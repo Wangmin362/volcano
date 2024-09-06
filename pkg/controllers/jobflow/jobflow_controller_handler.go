@@ -45,6 +45,7 @@ func (jf *jobflowcontroller) addJobFlow(obj interface{}) {
 		Event:  jobflowv1alpha1.OutOfSyncEvent,
 	}
 
+	// 添加到延时队列当中
 	jf.enqueueJobFlow(req)
 }
 
@@ -95,22 +96,25 @@ func (jf *jobflowcontroller) updateJob(oldObj, newObj interface{}) {
 	}
 
 	// Filter out jobs that are not created from volcano jobflow
+	// TODO 从这句可以推出，Job资源是被JobFlow资源创建的
 	if !isControlledBy(newJob, helpers.JobFlowKind) {
 		return
 	}
 
+	// 如果Job没有发生变化，直接退出
 	if newJob.ResourceVersion == oldJob.ResourceVersion {
 		return
 	}
 
+	// 1、由于上面已经判断过了，所以当前的Job资源一定是JobFlow资源创建的，因此肯定可以获取到当前Job关联的JobFlow资源
 	jobFlowName := getJobFlowNameByJob(newJob)
 	if jobFlowName == "" {
 		return
 	}
 
 	req := apis.FlowRequest{
-		Namespace:   newJob.Namespace,
-		JobFlowName: jobFlowName,
+		Namespace:   newJob.Namespace, // 关联的JobFlow所在的名称空间
+		JobFlowName: jobFlowName,      // 关联的JobFlow名字
 		Action:      jobflowv1alpha1.SyncJobFlowAction,
 		Event:       jobflowv1alpha1.OutOfSyncEvent,
 	}

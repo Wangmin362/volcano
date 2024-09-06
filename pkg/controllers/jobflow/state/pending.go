@@ -28,6 +28,9 @@ func (p *pendingState) Execute(action jobflowv1alpha1.Action) error {
 	switch action {
 	case jobflowv1alpha1.SyncJobFlowAction:
 		return SyncJobFlow(p.jobFlow, func(status *jobflowv1alpha1.JobFlowStatus, allJobList int) {
+			// 更新JobFlow资源的状态，核心思想就是如果当前JobFlow关联的Job都处于运行当中，或者已经运行完成，且没有失败的Job,那么认为JobFlow
+			// 处于Running。否则但凡有一个Job运行失败了，那么认为JobFlow为失败的状态，否则如果所有的Job都处于Pending状态，那么JobFlow也认为
+			// 处于Pending状态
 			if (len(status.RunningJobs) > 0 || len(status.CompletedJobs) > 0) && len(status.FailedJobs) <= 0 {
 				status.State.Phase = jobflowv1alpha1.Running
 			} else if len(status.FailedJobs) > 0 {

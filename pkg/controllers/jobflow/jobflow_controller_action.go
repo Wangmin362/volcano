@@ -40,6 +40,7 @@ func (jf *jobflowcontroller) syncJobFlow(jobFlow *v1alpha1flow.JobFlow, updateSt
 	defer klog.V(4).Infof("End sync JobFlow %s.", jobFlow.Name)
 
 	// JobRetainPolicy Judging whether jobs are necessary to delete
+	// 如果JobFlow资源的保留策略设置为删除，并且JobFlow已经运行完成了，那么删除此JobFlow创建的所有Job
 	if jobFlow.Spec.JobRetainPolicy == v1alpha1flow.Delete && jobFlow.Status.State.Phase == v1alpha1flow.Succeed {
 		if err := jf.deleteAllJobsCreatedByJobFlow(jobFlow); err != nil {
 			klog.Errorf("Failed to delete jobs of JobFlow %v/%v: %v",
@@ -50,6 +51,7 @@ func (jf *jobflowcontroller) syncJobFlow(jobFlow *v1alpha1flow.JobFlow, updateSt
 	}
 
 	// deploy job by dependence order.
+	// 更具Job的依赖顺序部署Job
 	if err := jf.deployJob(jobFlow); err != nil {
 		klog.Errorf("Failed to create jobs of JobFlow %v/%v: %v",
 			jobFlow.Namespace, jobFlow.Name, err)
@@ -57,12 +59,15 @@ func (jf *jobflowcontroller) syncJobFlow(jobFlow *v1alpha1flow.JobFlow, updateSt
 	}
 
 	// update jobFlow status
+	// 统计JobFlow管理的所有Job的状态
 	jobFlowStatus, err := jf.getAllJobStatus(jobFlow)
 	if err != nil {
 		return err
 	}
 	jobFlow.Status = *jobFlowStatus
+	// 更新JobFlow的状态
 	updateStateFn(&jobFlow.Status, len(jobFlow.Spec.Flows))
+	// 调用APIServer接口更新JobFlow的状态
 	_, err = jf.vcClient.FlowV1alpha1().JobFlows(jobFlow.Namespace).UpdateStatus(context.Background(), jobFlow, metav1.UpdateOptions{})
 	if err != nil {
 		klog.Errorf("Failed to update status of JobFlow %v/%v: %v",
@@ -75,17 +80,21 @@ func (jf *jobflowcontroller) syncJobFlow(jobFlow *v1alpha1flow.JobFlow, updateSt
 
 func (jf *jobflowcontroller) deployJob(jobFlow *v1alpha1flow.JobFlow) error {
 	// load jobTemplate by flow and deploy it
-	for _, flow := range jobFlow.Spec.Flows {
+	for _, flow := range jobFlow.Spec.Flows { // 遍历所有的Flow
+		// 生成Job名字
 		jobName := getJobName(jobFlow.Name, flow.Name)
+		// 查询是否已经创建了这个Job，如果已经创建了，直接忽略，啥也不需要管理
 		if _, err := jf.jobLister.Jobs(jobFlow.Namespace).Get(jobName); err != nil {
-			if errors.IsNotFound(err) {
+			if errors.IsNotFound(err) { // 如果还没有创建，那么就创建这个Job
 				// If it is not distributed, judge whether the dependency of the VcJob meets the requirements
 				if flow.DependsOn == nil || flow.DependsOn.Targets == nil {
+					// 如果当前Job没有依赖的Job，那么直接创建
 					if err := jf.createJob(jobFlow, flow); err != nil {
 						return err
 					}
-				} else {
+				} else { // 否则，说明当前Job依赖其他Job,所以需要先创建当前Job依赖的Job
 					// query whether the dependencies of the job have been met
+					// 判断依赖的Job是否已经创建，如果已经创建，是否已经执行完成，只有当依赖的Job执行完成了，当前的Job才可以启动
 					flag, err := jf.judge(jobFlow, flow)
 					if err != nil {
 						return err
@@ -141,6 +150,7 @@ func (jf *jobflowcontroller) createJob(jobFlow *v1alpha1flow.JobFlow, flow v1alp
 
 // getAllJobStatus Get the information of all created jobs
 func (jf *jobflowcontroller) getAllJobStatus(jobFlow *v1alpha1flow.JobFlow) (*v1alpha1flow.JobFlowStatus, error) {
+	// 获取当前JobFlow管理的所有Job
 	jobList, err := jf.getAllJobsCreatedByJobFlow(jobFlow)
 	if err != nil {
 		klog.Error(err, "get jobList error")

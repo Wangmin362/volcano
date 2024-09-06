@@ -26,6 +26,7 @@ func (p *runningState) Execute(action v1alpha1.Action) error {
 	switch action {
 	case v1alpha1.SyncJobFlowAction:
 		return SyncJobFlow(p.jobFlow, func(status *v1alpha1.JobFlowStatus, allJobList int) {
+			// Job处于Running的状态时，可能有些Job已经运行完成了，此时就更新Job的状态为Succeed，表示JobFlow底下所有的Job已经运行完成
 			if len(status.CompletedJobs) == allJobList {
 				status.State.Phase = v1alpha1.Succeed
 			}

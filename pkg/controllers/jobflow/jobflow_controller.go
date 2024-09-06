@@ -73,9 +73,12 @@ type jobflowcontroller struct {
 	// JobFlow Event recorder
 	recorder record.EventRecorder
 
-	queue          workqueue.RateLimitingInterface
+	// 队列
+	queue workqueue.RateLimitingInterface
+	// JobFlow的队列逻辑，函数为 enqueue
 	enqueueJobFlow func(req apis.FlowRequest)
 
+	// JobFlow资源的同步逻辑
 	syncHandler func(req *apis.FlowRequest) error
 
 	maxRequeueNum int
@@ -105,7 +108,7 @@ func (jf *jobflowcontroller) Initialize(opt *framework.ControllerOption) error {
 	jf.jobSynced = jf.jobInformer.Informer().HasSynced
 	jf.jobLister = jf.jobInformer.Lister()
 	jf.jobInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		UpdateFunc: jf.updateJob,
+		UpdateFunc: jf.updateJob, // 只关心Job的更新事件  TODO 这里为什么不关心Job的创建？
 	})
 
 	jf.maxRequeueNum = opt.MaxRequeueNum
@@ -131,12 +134,15 @@ func (jf *jobflowcontroller) Initialize(opt *framework.ControllerOption) error {
 func (jf *jobflowcontroller) Run(stopCh <-chan struct{}) {
 	defer jf.queue.ShutDown()
 
+	// 同步Job, JobFlow, JobTemplate资源
 	go jf.jobFlowInformer.Informer().Run(stopCh)
 	go jf.jobTemplateInformer.Informer().Run(stopCh)
 	go jf.jobInformer.Informer().Run(stopCh)
 
+	// 等待同步完成  TODO 之前的写法是否可以优化成这样
 	cache.WaitForCacheSync(stopCh, jf.jobSynced, jf.jobFlowSynced, jf.jobTemplateSynced)
 
+	// 启动worker协程，消费队列中的数据
 	go wait.Until(jf.worker, time.Second, stopCh)
 
 	klog.Infof("JobFlowController is running ...... ")
@@ -182,6 +188,7 @@ func (jf *jobflowcontroller) handleJobFlow(req *apis.FlowRequest) error {
 		klog.V(4).Infof("Finished syncing jobflow %s (%v).", req.JobFlowName, time.Since(startTime))
 	}()
 
+	// 从ShardInformer缓存中获取JobFlow资源的
 	jobflow, err := jf.jobFlowLister.JobFlows(req.Namespace).Get(req.JobFlowName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -192,12 +199,14 @@ func (jf *jobflowcontroller) handleJobFlow(req *apis.FlowRequest) error {
 		return fmt.Errorf("get jobflow %s failed for %v", req.JobFlowName, err)
 	}
 
+	// 获取当前JobFlow资源的状态
 	jobFlowState := jobflowstate.NewState(jobflow)
 	if jobFlowState == nil {
 		return fmt.Errorf("jobflow %s state %s is invalid", jobflow.Name, jobflow.Status.State)
 	}
 
 	klog.V(4).Infof("Begin execute %s action for jobflow %s", req.Action, req.JobFlowName)
+	// 执行对应状态的Execute函数，我猜这里主要还是为了维护JobFlow的状态
 	if err := jobFlowState.Execute(req.Action); err != nil {
 		return fmt.Errorf("sync jobflow %s failed for %v, event is %v, action is %s",
 			req.JobFlowName, err, req.Event, req.Action)
