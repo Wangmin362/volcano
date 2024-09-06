@@ -35,6 +35,7 @@ func (jt *jobtemplatecontroller) syncJobTemplate(jobTemplate *v1alpha1flow.JobTe
 		return err
 	}
 	selector = selector.Add(*r)
+	// 查询Job状态
 	jobList, err := jt.jobLister.Jobs(jobTemplate.Namespace).List(selector)
 	if err != nil {
 		klog.Errorf("Failed to list jobs of JobTemplate %v/%v: %v",
@@ -53,6 +54,7 @@ func (jt *jobtemplatecontroller) syncJobTemplate(jobTemplate *v1alpha1flow.JobTe
 	jobTemplate.Status.JobDependsOnList = jobListName
 
 	//update jobTemplate status
+	// 根据Job的状态更新JobTemplate状态
 	_, err = jt.vcClient.FlowV1alpha1().JobTemplates(jobTemplate.Namespace).UpdateStatus(context.Background(), jobTemplate, metav1.UpdateOptions{})
 	if err != nil {
 		klog.Errorf("Failed to update status of JobTemplate %v/%v: %v",

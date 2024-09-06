@@ -52,6 +52,7 @@ func (jt *jobtemplatecontroller) addJob(obj interface{}) {
 		return
 	}
 
+	// 说明当前Job并不是通过JobTemplate资源创建的
 	if job.Labels[CreatedByJobTemplate] == "" {
 		return
 	}

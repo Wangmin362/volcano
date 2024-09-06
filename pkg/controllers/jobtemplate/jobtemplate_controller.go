@@ -85,14 +85,14 @@ func (jt *jobtemplatecontroller) Initialize(opt *framework.ControllerOption) err
 	jt.jobTemplateSynced = jt.jobTemplateInformer.Informer().HasSynced
 	jt.jobTemplateLister = jt.jobTemplateInformer.Lister()
 	jt.jobTemplateInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: jt.addJobTemplate,
+		AddFunc: jt.addJobTemplate, // 只关心JobTemplate的新增事件
 	})
 
 	jt.jobInformer = informerfactory.NewSharedInformerFactory(jt.vcClient, 0).Batch().V1alpha1().Jobs()
 	jt.jobSynced = jt.jobInformer.Informer().HasSynced
 	jt.jobLister = jt.jobInformer.Lister()
 	jt.jobInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: jt.addJob,
+		AddFunc: jt.addJob, // 只关心Job的新增事件，显然这个Job只有是根据JobTemplate创建的Job才有作用
 	})
 
 	jt.maxRequeueNum = opt.MaxRequeueNum
@@ -167,6 +167,7 @@ func (jt *jobtemplatecontroller) handleJobTemplate(req *apis.FlowRequest) error 
 		klog.V(4).Infof("Finished syncing jobTemplate %s (%v).", req.JobTemplateName, time.Since(startTime))
 	}()
 
+	// 查询ShardInformer中缓存的JobTemplate资源
 	jobTemplate, err := jt.jobTemplateLister.JobTemplates(req.Namespace).Get(req.JobTemplateName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
