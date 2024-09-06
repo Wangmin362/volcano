@@ -45,15 +45,19 @@ import (
 var logFlushFreq = pflag.Duration("log-flush-frequency", 5*time.Second, "Maximum number of seconds between log flushes")
 
 func main() {
+	// TODO 有必要显示写这个么？ 默认就是CPU的核心数量么
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	klog.InitFlags(nil)
 
+	// Scheduler参数初始化
 	s := options.NewServerOption()
 	s.AddFlags(pflag.CommandLine)
 	s.RegisterOptions()
 
+	// 解析参数
 	cliflag.InitFlags()
+	// 校验参数是否有效
 	if err := s.CheckOptionOrDie(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)

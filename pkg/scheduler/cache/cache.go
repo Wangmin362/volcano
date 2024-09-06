@@ -87,7 +87,8 @@ func init() {
 }
 
 // New returns a Cache implementation.
-func New(config *rest.Config, schedulerNames []string, defaultQueue string, nodeSelectors []string, nodeWorkers uint32, ignoredProvisioners []string) Cache {
+func New(config *rest.Config, schedulerNames []string, defaultQueue string, nodeSelectors []string,
+	nodeWorkers uint32, ignoredProvisioners []string) Cache {
 	return newSchedulerCache(config, schedulerNames, defaultQueue, nodeSelectors, nodeWorkers, ignoredProvisioners)
 }
 

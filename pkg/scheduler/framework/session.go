@@ -51,6 +51,7 @@ type Session struct {
 	restConfig      *rest.Config
 	informerFactory informers.SharedInformerFactory
 
+	// TODO 似乎是用来记录集群中的总的容量
 	TotalResource *api.Resource
 	// podGroupStatus cache podgroup status during schedule
 	// This should not be mutated after initiated

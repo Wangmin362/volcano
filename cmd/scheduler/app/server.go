@@ -67,11 +67,13 @@ func Run(opt *options.ServerOption) error {
 		version.PrintVersionAndExit()
 	}
 
+	// 根据kubeconfig配置文件，构建APIServer客户端
 	config, err := kube.BuildConfig(opt.KubeClientOptions)
 	if err != nil {
 		return err
 	}
 
+	// TODO 如何配置了插件目录，那么Volcano Scheduler在启动的时候需要加载用户配置的插件
 	if opt.PluginsDir != "" {
 		err := framework.LoadCustomPlugins(opt.PluginsDir)
 		if err != nil {
@@ -80,13 +82,14 @@ func Run(opt *options.ServerOption) error {
 		}
 	}
 
+	// TODO 实例化Volcano Scheduler
 	sched, err := scheduler.NewScheduler(config, opt)
 	if err != nil {
 		panic(err)
 	}
 
 	if opt.EnableMetrics {
-		go func() {
+		go func() { // 给普罗米修斯添加指标
 			http.Handle("/metrics", promHandler())
 			klog.Fatalf("Prometheus Http Server failed %s", http.ListenAndServe(opt.ListenAddress, nil))
 		}()
@@ -98,8 +101,10 @@ func Run(opt *options.ServerOption) error {
 		}
 	}
 
+	// 优雅退出，注册SIGINT, SIGTERM信号
 	ctx := signals.SetupSignalContext()
 	run := func(ctx context.Context) {
+		// Scheduler开始运行
 		sched.Run(ctx.Done())
 		<-ctx.Done()
 	}

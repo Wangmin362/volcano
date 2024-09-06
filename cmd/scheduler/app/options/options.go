@@ -91,6 +91,7 @@ type ServerOption struct {
 type DecryptFunc func(c *ServerOption) error
 
 // ServerOpts server options.
+// 全局参数
 var ServerOpts *ServerOption
 
 // NewServerOption creates a new CMServer with a default config.
@@ -108,9 +109,13 @@ func (s *ServerOption) AddFlags(fs *pflag.FlagSet) {
 		"after server cert).")
 	fs.StringVar(&s.KeyFile, "tls-private-key-file", s.KeyFile, "File containing the default x509 private key matching --tls-cert-file.")
 	// volcano scheduler will ignore pods with scheduler names other than specified with the option
+	// Volcano调度的名字
 	fs.StringArrayVar(&s.SchedulerNames, "scheduler-name", []string{defaultSchedulerName}, "vc-scheduler will handle pods whose .spec.SchedulerName is same as scheduler-name")
+	// 调度其配置
 	fs.StringVar(&s.SchedulerConf, "scheduler-conf", "", "The absolute path of scheduler configuration file")
+	// TODO Volcano调度器每次调度都会有固定的调度周期，每个周期会开启Session完成i导读，这里应该就是再配置间隔
 	fs.DurationVar(&s.SchedulePeriod, "schedule-period", defaultSchedulerPeriod, "The period between each scheduling cycle")
+	// 不管用户是否创建默认的Queue, Volcano都会创建一个默认的Queue
 	fs.StringVar(&s.DefaultQueue, "default-queue", defaultQueue, "The default queue name of the job")
 	fs.BoolVar(&s.EnableLeaderElection, "leader-elect", true,
 		"Start a leader election client and gain leadership before "+
@@ -125,6 +130,7 @@ func (s *ServerOption) AddFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&s.KubeClientOptions.Burst, "kube-api-burst", defaultBurst, "Burst to use while talking with kubernetes apiserver")
 
 	// Minimum number of feasible nodes to find and score
+	// 最少找到多少个可用的Node数量，当集群很大的时候，非常有用，因为不需要遍历所有的节点
 	fs.Int32Var(&s.MinNodesToFind, "minimum-feasible-nodes", defaultMinNodesToFind, "The minimum number of feasible nodes to find and score")
 
 	// Minimum percentage of nodes to find and score
@@ -133,12 +139,15 @@ func (s *ServerOption) AddFlags(fs *pflag.FlagSet) {
 	// The percentage of nodes that would be scored in each scheduling cycle; if <= 0, an adpative percentage will be calcuated
 	fs.Int32Var(&s.PercentageOfNodesToFind, "percentage-nodes-to-find", defaultPercentageOfNodesToFind, "The percentage of nodes to find and score, if <=0 will be calcuated based on the cluster size")
 
+	// TODO volcano插件有啥用？有哪些类型，用户如何自定义插件？
 	fs.StringVar(&s.PluginsDir, "plugins-dir", defaultPluginsDir, "vc-scheduler will load custom plugins which are in this directory")
 	fs.BoolVar(&s.EnableCSIStorage, "csi-storage", false,
 		"Enable tracking of available storage capacity that CSI drivers provide; it is false by default")
 	fs.BoolVar(&s.EnableHealthz, "enable-healthz", false, "Enable the health check; it is false by default")
 	fs.BoolVar(&s.EnableMetrics, "enable-metrics", false, "Enable the metrics function; it is false by default")
+	// 用户可以给某些节点打上特定的标签让Volcano进行管理，相当于手动划分了集群资源，这种方式比较适合初期适用的情况，毕竟集群划分之后不利于提高集群的利用率
 	fs.StringSliceVar(&s.NodeSelector, "node-selector", nil, "volcano only work with the labeled node, like: --node-selector=volcano.sh/role:train --node-selector=volcano.sh/role:serving")
+	// TODO 这个特性因该怎么使用？ 看其实有点类似于内核的core dump特性
 	fs.BoolVar(&s.EnableCacheDumper, "cache-dumper", true, "Enable the cache dumper, it's true by default")
 	fs.StringVar(&s.CacheDumpFileDir, "cache-dump-dir", "/tmp", "The target dir where the json file put at when dump cache info to json file")
 	fs.Uint32Var(&s.NodeWorkerThreads, "node-worker-threads", defaultNodeWorkers, "The number of threads syncing node operations.")
