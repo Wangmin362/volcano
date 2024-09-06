@@ -28,17 +28,18 @@ type State interface {
 }
 
 // UpdateQueueStatusFn updates the queue status.
+// 用于更新Queue资源的状态
 type UpdateQueueStatusFn func(status *v1beta1.QueueStatus, podGroupList []string)
 
 // QueueActionFn will open, close or sync queue.
 type QueueActionFn func(queue *v1beta1.Queue, fn UpdateQueueStatusFn) error
 
 var (
-	// SyncQueue will sync queue status.
+	// SyncQueue will sync queue status. 用于同步Queue的状态
 	SyncQueue QueueActionFn
-	// OpenQueue will set state of queue to open
+	// OpenQueue will set state of queue to open 用于把Queue的状态设置为Open
 	OpenQueue QueueActionFn
-	// CloseQueue will set state of queue to close
+	// CloseQueue will set state of queue to close  用于把Queue的状态设置为Close
 	CloseQueue QueueActionFn
 )
 

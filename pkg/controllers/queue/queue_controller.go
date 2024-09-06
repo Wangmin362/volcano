@@ -84,7 +84,7 @@ type queuecontroller struct {
 
 	pgMutex sync.RWMutex
 	// queue name -> podgroup namespace/name
-	// 把podGroup通过不同的queue进行分组
+	// 把podGroup通过不同的queue进行分组，记录每个queue中存在的PodGroup资源
 	podGroups map[string]map[string]struct{}
 
 	syncHandler        func(req *apis.Request) error
@@ -179,15 +179,17 @@ func (c *queuecontroller) Initialize(opt *framework.ControllerOption) error {
 
 // Run starts QueueController.
 func (c *queuecontroller) Run(stopCh <-chan struct{}) {
-	defer utilruntime.HandleCrash()
+	defer utilruntime.HandleCrash() // 处理panic
 	defer c.queue.ShutDown()
 	defer c.commandQueue.ShutDown()
 
 	klog.Infof("Starting queue controller.")
 	defer klog.Infof("Shutting down queue controller.")
 
+	// 启动Informer，同步Queue, PodGroup, QueueCommand资源
 	c.vcInformerFactory.Start(stopCh)
 
+	// 等待Informer同步完成
 	for informerType, ok := range c.vcInformerFactory.WaitForCacheSync(stopCh) {
 		if !ok {
 			klog.Errorf("caches failed to sync: %v", informerType)
@@ -195,7 +197,10 @@ func (c *queuecontroller) Run(stopCh <-chan struct{}) {
 		}
 	}
 
+	// 消费Queue
 	go wait.Until(c.worker, 0, stopCh)
+
+	// 消费QueueCommand
 	go wait.Until(c.commandWorker, 0, stopCh)
 
 	<-stopCh
@@ -223,6 +228,7 @@ func (c *queuecontroller) processNextWorkItem() bool {
 		return true
 	}
 
+	// 同步队列，其实就是下面的handleQueue函数
 	err := c.syncHandler(req)
 	c.handleQueueErr(err, obj)
 
@@ -235,6 +241,7 @@ func (c *queuecontroller) handleQueue(req *apis.Request) error {
 		klog.V(4).Infof("Finished syncing queue %s (%v).", req.QueueName, time.Since(startTime))
 	}()
 
+	// 从ShardInformer当中获取队列Queue资源，由于queue是全局资源，因此没有名称空间这个概念
 	queue, err := c.queueLister.Get(req.QueueName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -245,12 +252,14 @@ func (c *queuecontroller) handleQueue(req *apis.Request) error {
 		return fmt.Errorf("get queue %s failed for %v", req.QueueName, err)
 	}
 
+	// 获取queue的状态
 	queueState := queuestate.NewState(queue)
 	if queueState == nil {
 		return fmt.Errorf("queue %s state %s is invalid", queue.Name, queue.Status.State)
 	}
 
 	klog.V(4).Infof("Begin execute %s action for queue %s, current status %s", req.Action, req.QueueName, queue.Status.State)
+	// TODO 根据queue的状态执行特定的函数
 	if err := queueState.Execute(req.Action); err != nil {
 		return fmt.Errorf("sync queue %s failed for %v, event is %v, action is %s",
 			req.QueueName, err, req.Event, req.Action)
@@ -308,6 +317,7 @@ func (c *queuecontroller) handleCommand(cmd *busv1alpha1.Command) error {
 		klog.V(4).Infof("Finished syncing command %s/%s (%v).", cmd.Namespace, cmd.Name, time.Since(startTime))
 	}()
 
+	// 查询APIServer QueueCommand资源
 	err := c.vcClient.BusV1alpha1().Commands(cmd.Namespace).Delete(context.TODO(), cmd.Name, metav1.DeleteOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -317,10 +327,12 @@ func (c *queuecontroller) handleCommand(cmd *busv1alpha1.Command) error {
 		return fmt.Errorf("failed to delete command <%s/%s> for %v", cmd.Namespace, cmd.Name, err)
 	}
 
+	// TODO Q: QueueCommand和Queue之间到底是什么关系？
+	// TODO A: 我推测QueueCommand就是volcano给留给用户的控制接口，用于手动控制Queue
 	req := &apis.Request{
-		QueueName: cmd.TargetObject.Name,
+		QueueName: cmd.TargetObject.Name, // 对哪个Queue执行操作
 		Event:     busv1alpha1.CommandIssuedEvent,
-		Action:    busv1alpha1.Action(cmd.Action),
+		Action:    busv1alpha1.Action(cmd.Action), // 执行的操作
 	}
 
 	c.enqueueQueue(req)

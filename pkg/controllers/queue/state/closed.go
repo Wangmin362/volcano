@@ -33,6 +33,7 @@ func (cs *closedState) Execute(action v1alpha1.Action) error {
 		})
 	case v1alpha1.CloseQueueAction:
 		return SyncQueue(cs.queue, func(status *v1beta1.QueueStatus, podGroupList []string) {
+			// Queue已经处理Closed状态了，因此不可能Queue中还存在PodGroup资源，所以直接设置为Closed状态
 			status.State = v1beta1.QueueStateClosed
 		})
 	default:

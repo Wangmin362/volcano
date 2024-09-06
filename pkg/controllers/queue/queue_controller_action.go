@@ -31,18 +31,23 @@ import (
 	"volcano.sh/volcano/pkg/controllers/queue/state"
 )
 
+// TODO 什么叫做同步Queue资源？ 怎么同步的？
 func (c *queuecontroller) syncQueue(queue *schedulingv1beta1.Queue, updateStateFn state.UpdateQueueStatusFn) error {
 	klog.V(4).Infof("Begin to sync queue %s.", queue.Name)
 	defer klog.V(4).Infof("End sync queue %s.", queue.Name)
 
+	// 获取当前Queue中所有的PodGroup资源
 	podGroups := c.getPodGroups(queue.Name)
+	// 初始化Queue的状态
 	queueStatus := schedulingv1beta1.QueueStatus{}
 
+	// 通过当前Queue中所有的PodGroup资源处理Pending, Running, Unknown, Inqueue的状态
 	for _, pgKey := range podGroups {
 		// Ignore error here, tt can not occur.
 		ns, name, _ := cache.SplitMetaNamespaceKey(pgKey)
 
 		// TODO: check NotFound error and sync local cache.
+		// 通过ShardInformer缓存查询PodGroup资源
 		pg, err := c.pgLister.PodGroups(ns).Get(name)
 		if err != nil {
 			return err
@@ -61,11 +66,13 @@ func (c *queuecontroller) syncQueue(queue *schedulingv1beta1.Queue, updateStateF
 	}
 
 	if updateStateFn != nil {
+		// 更新Queue的状态
 		updateStateFn(&queueStatus, podGroups)
 	} else {
 		queueStatus.State = queue.Status.State
 	}
 
+	// 记录Queue中已经分配的资源
 	queueStatus.Allocated = queue.Status.Allocated.DeepCopy()
 	// queue.status.allocated will be updated after every session close in volcano scheduler, we should not depend on it because session may be time-consuming,
 	// and queue.status.allocated can't be updated timely. We initialize queue.status.allocated and update it here explicitly
@@ -74,13 +81,14 @@ func (c *queuecontroller) syncQueue(queue *schedulingv1beta1.Queue, updateStateF
 		queueStatus.Allocated = v1.ResourceList{}
 	}
 
-	// ignore update when status does not change
+	// ignore update when status does not change  如果Queue的状态没有改变，直接返回
 	if reflect.DeepEqual(queueStatus, queue.Status) {
 		return nil
 	}
 
 	newQueue := queue.DeepCopy()
 	newQueue.Status = queueStatus
+	// 更新Queue的状态
 	if _, err := c.vcClient.SchedulingV1beta1().Queues().UpdateStatus(context.TODO(), newQueue, metav1.UpdateOptions{}); err != nil {
 		klog.Errorf("Failed to update status of Queue %s: %v.", newQueue.Name, err)
 		return err
@@ -96,6 +104,7 @@ func (c *queuecontroller) openQueue(queue *schedulingv1beta1.Queue, updateStateF
 	newQueue.Status.State = schedulingv1beta1.QueueStateOpen
 
 	if queue.Status.State != newQueue.Status.State {
+		// 更新Queue的状态为Open
 		if _, err := c.vcClient.SchedulingV1beta1().Queues().Update(context.TODO(), newQueue, metav1.UpdateOptions{}); err != nil {
 			c.recorder.Event(newQueue, v1.EventTypeWarning, string(v1alpha1.OpenQueueAction),
 				fmt.Sprintf("Open queue failed for %v", err))
@@ -107,6 +116,7 @@ func (c *queuecontroller) openQueue(queue *schedulingv1beta1.Queue, updateStateF
 		return nil
 	}
 
+	// 查询APIServer获取Queue的状态
 	q, err := c.vcClient.SchedulingV1beta1().Queues().Get(context.TODO(), newQueue.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
@@ -114,12 +124,14 @@ func (c *queuecontroller) openQueue(queue *schedulingv1beta1.Queue, updateStateF
 
 	newQueue = q.DeepCopy()
 	if updateStateFn != nil {
+		// 更新Queue的状态
 		updateStateFn(&newQueue.Status, nil)
 	} else {
 		return fmt.Errorf("internal error, update state function should be provided")
 	}
 
 	if queue.Status.State != newQueue.Status.State {
+		// 更新Queue的状态
 		if _, err := c.vcClient.SchedulingV1beta1().Queues().UpdateStatus(context.TODO(), newQueue, metav1.UpdateOptions{}); err != nil {
 			c.recorder.Event(newQueue, v1.EventTypeWarning, string(v1alpha1.OpenQueueAction),
 				fmt.Sprintf("Update queue status from %s to %s failed for %v",
