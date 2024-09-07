@@ -36,6 +36,7 @@ func OpenSession(cache cache.Cache, tiers []conf.Tier, configurations []conf.Con
 
 	for _, tier := range tiers {
 		for _, plugin := range tier.Plugins {
+			// 加载插件
 			if pb, found := GetPluginBuilder(plugin.Name); !found {
 				klog.Errorf("Failed to get plugin %s.", plugin.Name)
 			} else {

@@ -60,6 +60,7 @@ func (alloc *Action) Execute(ssn *framework.Session) {
 	jobsMap := map[api.QueueID]*util.PriorityQueue{}
 
 	alloc.session = ssn
+	// 找到适合调度的Queue和Job
 	alloc.pickUpQueuesAndJobs(queues, jobsMap)
 	klog.V(3).Infof("Try to allocate resource to %d Queues", len(jobsMap))
 	alloc.allocateResources(queues, jobsMap)
@@ -70,28 +71,32 @@ func (alloc *Action) pickUpQueuesAndJobs(queues *util.PriorityQueue, jobsMap map
 	for _, job := range ssn.Jobs {
 		// If not config enqueue action, change Pending pg into Inqueue statue to avoid blocking job scheduling.
 		if conf.EnabledActionMap["enqueue"] {
-			if job.IsPending() {
+			if job.IsPending() { // 如果进入分配阶段了，此时不在考虑还处于Pending状态的Job，因为再enqueue阶段已经把所有的Job变为了Inqueue状态
 				klog.V(4).Infof("Job <%s/%s> Queue <%s> skip allocate, reason: job status is pending.",
 					job.Namespace, job.Name, job.Queue)
 				continue
 			}
 		} else if job.IsPending() {
+			// 如果没有enqueue Action，那么Job的状态不可能变为Inqueue状态，因此这里默认所有的Job都是Inqueue状态
 			klog.V(4).Infof("Job <%s/%s> Queue <%s> status update from pending to inqueue, reason: no enqueue action is configured.",
 				job.Namespace, job.Name, job.Queue)
 			job.PodGroup.Status.Phase = scheduling.PodGroupInqueue
 		}
 
+		// 校验当前Job是否合法
 		if vr := ssn.JobValid(job); vr != nil && !vr.Pass {
 			klog.V(4).Infof("Job <%s/%s> Queue <%s> skip allocate, reason: %v, message %v", job.Namespace, job.Name, job.Queue, vr.Reason, vr.Message)
 			continue
 		}
 
+		// 查找这个Job所在Queue，如果没有找到，直接退出这个Job的调度
 		if _, found := ssn.Queues[job.Queue]; !found {
 			klog.Warningf("Skip adding Job <%s/%s> because its queue %s is not found",
 				job.Namespace, job.Name, job.Queue)
 			continue
 		}
 
+		// 找到当前Job所在Queue的队列，这个队列当中包含了所有再Queue中的Job
 		if _, found := jobsMap[job.Queue]; !found {
 			jobsMap[job.Queue] = util.NewPriorityQueue(ssn.JobOrderFn)
 			queues.Push(ssn.Queues[job.Queue])
@@ -121,6 +126,7 @@ func (alloc *Action) allocateResources(queues *util.PriorityQueue, jobsMap map[a
 
 		queue := queues.Pop().(*api.QueueInfo)
 
+		// TODO 似乎再说当前Queue已经使用到容量的上线了，因此直接忽略这个Queue中Job的调度
 		if ssn.Overused(queue) {
 			klog.V(3).Infof("Queue <%s> is overused, ignore it.", queue.Name)
 			continue
@@ -134,11 +140,14 @@ func (alloc *Action) allocateResources(queues *util.PriorityQueue, jobsMap map[a
 			continue
 		}
 
+		// 弹出一个Job
 		job := jobs.Pop().(*api.JobInfo)
 		if _, found = pendingTasks[job.UID]; !found {
 			tasks := util.NewPriorityQueue(ssn.TaskOrderFn)
+			// 调度处于Pending的Job
 			for _, task := range job.TaskStatusIndex[api.Pending] {
 				// Skip BestEffort task in 'allocate' action.
+				// TODO 这里为什么要这么设计
 				if task.Resreq.IsEmpty() {
 					klog.V(4).Infof("Task <%v/%v> is BestEffort task, skip it.",
 						task.Namespace, task.Name)
@@ -165,7 +174,8 @@ func (alloc *Action) allocateResources(queues *util.PriorityQueue, jobsMap map[a
 	}
 }
 
-func (alloc *Action) allocateResourcesForTasks(tasks *util.PriorityQueue, job *api.JobInfo, jobs *util.PriorityQueue, queue *api.QueueInfo, allNodes []*api.NodeInfo) {
+func (alloc *Action) allocateResourcesForTasks(tasks *util.PriorityQueue, job *api.JobInfo, jobs *util.PriorityQueue,
+	queue *api.QueueInfo, allNodes []*api.NodeInfo) {
 	ssn := alloc.session
 	stmt := framework.NewStatement(ssn)
 	ph := util.NewPredicateHelper()

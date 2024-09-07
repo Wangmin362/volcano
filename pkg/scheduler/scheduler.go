@@ -116,6 +116,7 @@ func (pc *Scheduler) Run(stopCh <-chan struct{}) {
 	pc.cache.WaitForCacheSync(stopCh)
 	klog.V(2).Infof("Scheduler completes Initialization and start to run")
 	// TODO 核心在这里
+	// schedulePeriod默认为1秒，也就是volcano默认调度器每秒钟执行一次调度
 	go wait.Until(pc.runOnce, pc.schedulePeriod, stopCh)
 	if options.ServerOpts.EnableCacheDumper {
 		pc.dumper.ListenForSignal(stopCh)
@@ -134,9 +135,9 @@ func (pc *Scheduler) runOnce() {
 	defer klog.V(4).Infof("End scheduling ...")
 
 	pc.mutex.Lock()
-	actions := pc.actions
-	plugins := pc.plugins
-	configurations := pc.configurations
+	actions := pc.actions               // 用户配置的action
+	plugins := pc.plugins               // 用于配置的plugin
+	configurations := pc.configurations // 用户给action的配置文件
 	pc.mutex.Unlock()
 
 	// Load ConfigMap to check which action is enabled.
@@ -148,7 +149,7 @@ func (pc *Scheduler) runOnce() {
 	// 开启一个调度Session TODO 如何理解一个Session
 	ssn := framework.OpenSession(pc.cache, plugins, configurations)
 	defer func() {
-		framework.CloseSession(ssn)
+		framework.CloseSession(ssn) // 完成调度
 		metrics.UpdateE2eDuration(metrics.Duration(scheduleStartTime))
 	}()
 

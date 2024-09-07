@@ -27,6 +27,7 @@ type PriorityQueue struct {
 	queue priorityQueue
 }
 
+// 本质上是一个小端堆
 type priorityQueue struct {
 	items  []interface{}
 	lessFn api.LessFn

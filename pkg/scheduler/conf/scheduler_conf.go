@@ -17,6 +17,7 @@ limitations under the License.
 package conf
 
 // EnabledActionMap check if a action exist in scheduler configmap. If not exist the value is false.
+// 1、调度器当前启用的Action
 var EnabledActionMap map[string]bool
 
 // SchedulerConfiguration defines the configuration of scheduler.

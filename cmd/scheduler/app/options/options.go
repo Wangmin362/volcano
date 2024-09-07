@@ -113,7 +113,7 @@ func (s *ServerOption) AddFlags(fs *pflag.FlagSet) {
 	fs.StringArrayVar(&s.SchedulerNames, "scheduler-name", []string{defaultSchedulerName}, "vc-scheduler will handle pods whose .spec.SchedulerName is same as scheduler-name")
 	// 调度其配置
 	fs.StringVar(&s.SchedulerConf, "scheduler-conf", "", "The absolute path of scheduler configuration file")
-	// TODO Volcano调度器每次调度都会有固定的调度周期，每个周期会开启Session完成i导读，这里应该就是再配置间隔
+	// TODO Volcano调度器每次调度都会有固定的调度周期，每个周期会开启Session完成调度，这里应该就是再配置间隔，调度周期默认是1秒
 	fs.DurationVar(&s.SchedulePeriod, "schedule-period", defaultSchedulerPeriod, "The period between each scheduling cycle")
 	// 不管用户是否创建默认的Queue, Volcano都会创建一个默认的Queue
 	fs.StringVar(&s.DefaultQueue, "default-queue", defaultQueue, "The default queue name of the job")
