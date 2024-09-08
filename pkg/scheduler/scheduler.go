@@ -78,7 +78,7 @@ func NewScheduler(config *rest.Config, opt *options.ServerOption) (*Scheduler, e
 		}
 	}
 
-	// TODO 缓存的原理
+	// 这里的缓存其实就是缓存了Job, Queue, Nodes, PV, PVC, CSINode, PriorityClass等等所有可以影响调度相关的信息
 	cache := schedcache.New(
 		config,
 		opt.SchedulerNames,

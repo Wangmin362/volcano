@@ -31,9 +31,12 @@ func OpenSession(cache cache.Cache, tiers []conf.Tier, configurations []conf.Con
 	ssn := openSession(cache)
 	ssn.Tiers = tiers
 	ssn.Configurations = configurations
+	// 两种表示NodeInfo数据结构之间的转换
 	ssn.NodeMap = GenerateNodeMapAndSlice(ssn.Nodes)
+	// 从Job中分理出Pod
 	ssn.PodLister = NewPodLister(ssn)
 
+	// TODO 为什么要设计为两层的结构？
 	for _, tier := range tiers {
 		for _, plugin := range tier.Plugins {
 			// 加载插件
@@ -43,6 +46,9 @@ func OpenSession(cache cache.Cache, tiers []conf.Tier, configurations []conf.Con
 				plugin := pb(plugin.Arguments)
 				ssn.plugins[plugin.Name()] = plugin
 				onSessionOpenStart := time.Now()
+				// OpenSession的时候，会执行用户配置的各个Plugin的OnOpenSession方法
+				// TODO Plugin是如何影响整个调度流程的？其实Plugin并没有影响Session, Cache中元数据，各个插件的实现原理是向Session中
+				// 注册回调函数，在执行调度的过程当中会执行这些回调函数，从而影响调度过程
 				plugin.OnSessionOpen(ssn)
 				metrics.UpdatePluginDuration(plugin.Name(), metrics.OnSessionOpen, metrics.Duration(onSessionOpenStart))
 			}

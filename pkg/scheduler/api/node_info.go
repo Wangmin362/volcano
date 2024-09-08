@@ -66,9 +66,10 @@ type NodeInfo struct {
 	Capacity      *Resource
 	ResourceUsage *NodeUsage
 
-	Tasks             map[TaskID]*TaskInfo
-	NumaInfo          *NumatopoInfo
-	NumaChgFlag       NumaChgFlag
+	Tasks       map[TaskID]*TaskInfo
+	NumaInfo    *NumatopoInfo
+	NumaChgFlag NumaChgFlag
+	// 节点拓扑信息
 	NumaSchedulerInfo *NumatopoInfo
 	RevocableZone     string
 

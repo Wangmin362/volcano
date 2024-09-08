@@ -490,13 +490,18 @@ func (sc *SchedulerCache) AddOrUpdateNode(node *v1.Node) error {
 	defer sc.Mutex.Unlock()
 
 	if sc.Nodes[node.Name] != nil {
+		// 更新节点的NodeInfo信息  TODO 重点是NodeInfo元数据的更新
 		sc.Nodes[node.Name].SetNode(node)
+		// 这里为什么需要移除节点的镜像信息？ 因为后面紧跟着就重新添加了镜像相关的信息
 		sc.removeNodeImageStates(node.Name)
 	} else {
+		// 以前不存在，说明当前节点是新增的，或者说是volcano scheduler刚启动
 		sc.Nodes[node.Name] = schedulingapi.NewNodeInfo(node)
 	}
+	// 更新节点的镜像信息
 	sc.addNodeImageStates(node, sc.Nodes[node.Name])
 
+	// TODO 下面这段代码完全可以抽象出一个函数，写的太罗嗦了
 	var nodeExisted bool
 	for _, name := range sc.NodeList {
 		if name == node.Name {
@@ -511,6 +516,10 @@ func (sc *SchedulerCache) AddOrUpdateNode(node *v1.Node) error {
 }
 
 // RemoveNode removes node info from cache
+// 1、维护节点信息，移除当前节点
+// 2、维护镜像信息，当前节点已经被删除，那么所有的信息必须要移除相关的节点信息，即表示某个镜像已经不再当前这个被删除的节点上了
+// 3、如当前节点存在NUMA拓扑信息，移除NUMA拓扑信息
+// 4、移除关于当前节点所有的NodeInfo信息
 func (sc *SchedulerCache) RemoveNode(nodeName string) error {
 	sc.Mutex.Lock()
 	defer sc.Mutex.Unlock()
@@ -521,12 +530,14 @@ func (sc *SchedulerCache) RemoveNode(nodeName string) error {
 			break
 		}
 	}
+	// 维护镜像相关的信息，节点已经不存在了，那么可以认为这个节点不存在相关的镜像信息
 	sc.removeNodeImageStates(nodeName)
 
 	if _, ok := sc.Nodes[nodeName]; !ok {
 		return fmt.Errorf("node <%s> does not exist", nodeName)
 	}
 
+	// 删除节点上关于NUMA的拓扑信息
 	numaInfo := sc.Nodes[nodeName].NumaInfo
 	if numaInfo != nil {
 		klog.V(3).Infof("delete numatopo <%s/%s>", numaInfo.Namespace, numaInfo.Name)
@@ -535,6 +546,8 @@ func (sc *SchedulerCache) RemoveNode(nodeName string) error {
 			klog.Errorf("delete numatopo <%s/%s> failed.", numaInfo.Namespace, numaInfo.Name)
 		}
 	}
+
+	// 删除节点
 	delete(sc.Nodes, nodeName)
 	return nil
 }
@@ -585,9 +598,15 @@ func (sc *SchedulerCache) DeleteNode(obj interface{}) {
 }
 
 func (sc *SchedulerCache) SyncNode(nodeName string) error {
+	// 从SharedInformer缓存当中查询Node资源对象
 	node, err := sc.nodeInformer.Lister().Get(nodeName)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			// 如果没有找到这个节点，说明这个节点已经被删除，此时需要删除这个节点相关的信息
+			// 1、维护节点信息，移除当前节点
+			// 2、维护镜像信息，当前节点已经被删除，那么所有的信息必须要移除相关的节点信息，即表示某个镜像已经不再当前这个被删除的节点上了
+			// 3、如当前节点存在NUMA拓扑信息，移除NUMA拓扑信息
+			// 4、移除关于当前节点所有的NodeInfo信息
 			deleteErr := sc.RemoveNode(nodeName)
 			if deleteErr != nil {
 				klog.Errorf("Failed to delete node <%s> and remove from cache: %s", nodeName, deleteErr.Error())
@@ -601,8 +620,12 @@ func (sc *SchedulerCache) SyncNode(nodeName string) error {
 		return err
 	}
 
+	// 如果查询到了节点信息，说明当前节点还没有被删除，此时需要维护节点相关的元数据，也就是NodeInfo信息
+
+	// 从ShardInformer缓存中查询CSINode相关的信息
 	csiNode, err := sc.csiNodeInformer.Lister().Get(nodeName)
 	if err == nil {
+		// 维护节点的CSINode子隐患信息
 		sc.setCSIResourceOnNode(csiNode, node)
 	} else if !errors.IsNotFound(err) {
 		return err
@@ -1188,6 +1211,7 @@ func (sc *SchedulerCache) DeleteNumaInfoV1alpha1(obj interface{}) {
 }
 
 // AddJob add job to scheduler cache
+// TODO 这玩意什么时候会被调用
 func (sc *SchedulerCache) AddJob(obj interface{}) {
 	job, ok := obj.(*schedulingapi.JobInfo)
 	if !ok {

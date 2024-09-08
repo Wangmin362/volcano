@@ -30,10 +30,11 @@ import (
 // Cache collects pods/nodes/queues information
 // and provides information snapshot
 type Cache interface {
-	// Run start informer
+	// Run start informer  TODO 内部会启动各种Informer用于从APIServer同步Cache关心的各种信息
 	Run(stopCh <-chan struct{})
 
 	// Snapshot deep copy overall cache information into snapshot
+	// 1、TODO 什么场景下需要做快照？
 	Snapshot() *api.ClusterInfo
 
 	// WaitForCacheSync waits for all cache synced
@@ -47,6 +48,7 @@ type Cache interface {
 	BindPodGroup(job *api.JobInfo, cluster string) error
 
 	// Evict evicts the task to release resources.
+	// TODO 驱逐的到底是Job还是Task?
 	Evict(task *api.TaskInfo, reason string) error
 
 	// RecordJobStatusEvent records related events according to job status.
@@ -54,9 +56,11 @@ type Cache interface {
 	RecordJobStatusEvent(job *api.JobInfo, updatePG bool)
 
 	// UpdateJobStatus puts job in backlog for a while.
+	// TODO 这里更新的Job状态会反向更新到APIServer么？ 理论上应该需要更新APIServer，这样用户才能看到最新的Job状态
 	UpdateJobStatus(job *api.JobInfo, updatePG bool) (*api.JobInfo, error)
 
 	// UpdateQueueStatus update queue status.
+	// TODO 同理，我猜测这里更新的Queue状态也会更新到APIServer当中
 	UpdateQueueStatus(queue *api.QueueInfo) error
 
 	// GetPodVolumes get pod volume on the host
@@ -77,6 +81,7 @@ type Cache interface {
 	// ClientConfig returns the rest config
 	ClientConfig() *rest.Config
 
+	// UpdateSchedulerNumaInfo TODO Volcano中是如何处理NUMA相关信息的？
 	UpdateSchedulerNumaInfo(sets map[string]api.ResNumaSets) error
 
 	// SharedInformerFactory return scheduler SharedInformerFactory

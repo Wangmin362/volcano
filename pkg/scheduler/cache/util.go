@@ -100,7 +100,7 @@ func getMultiSchedulerInfo() (schedulerPodName string, c *consistent.Consistent)
 	multiSchedulerEnable := os.Getenv("MULTI_SCHEDULER_ENABLE")
 	mySchedulerPodName := os.Getenv("SCHEDULER_POD_NAME")
 	c = nil
-	if multiSchedulerEnable == "true" {
+	if multiSchedulerEnable == "true" { // TODO 这里的判断可以再健壮一点，譬如true, True, TRUE都应该支持
 		klog.V(3).Infof("multiSchedulerEnable true")
 		schedulerNumStr := os.Getenv("SCHEDULER_NUM")
 		schedulerNum, err := strconv.Atoi(schedulerNumStr)

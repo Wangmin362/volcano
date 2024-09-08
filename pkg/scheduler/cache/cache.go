@@ -96,14 +96,21 @@ func New(config *rest.Config, schedulerNames []string, defaultQueue string, node
 type SchedulerCache struct {
 	sync.Mutex
 
-	kubeClient   kubernetes.Interface
-	restConfig   *rest.Config
-	vcClient     vcclient.Interface
+	// APIServer的客户端工具
+	kubeClient kubernetes.Interface
+	restConfig *rest.Config
+	vcClient   vcclient.Interface
+
+	// 默认队列的名字，若用户没有指定任何队列，提交的所有Job, PodGroup相关信息都会绑定到这个Queue当中
 	defaultQueue string
 	// schedulerName is the name for volcano scheduler
-	schedulerNames     []string
+	// 用户给Volcano Scheduler指定的名字，名字可以指定多个，方便后期做升级
+	schedulerNames []string
+	// 用户给Node指定的标签，这种情况下，用户一般是多调度器模式，也就是说在用户的K8S集群中，存在多个调度器调度Pod，此时用户可以给Node
+	// 通过指定标签的形式给Volcano Scheduler指定可以调度的Node，相当于把集群做了拆分，专门给Volcano Scheduler设置了可以调度的Node
 	nodeSelectorLabels map[string]string
-	metricsConf        map[string]string
+	// TODO 指标相关的配置文件，估计是用来配置暴露哪些指标
+	metricsConf map[string]string
 
 	podInformer                infov1.PodInformer
 	nodeInformer               infov1.NodeInformer
@@ -119,6 +126,7 @@ type SchedulerCache struct {
 	csiStorageCapacityInformer storagev1beta1.CSIStorageCapacityInformer
 	cpuInformer                cpuinformerv1.NumatopologyInformer
 
+	// 用于绑定Task和主机名，TODO 可以理解为把Task调度到某个Node上么
 	Binder         Binder
 	Evictor        Evictor
 	StatusUpdater  StatusUpdater
@@ -150,6 +158,8 @@ type SchedulerCache struct {
 	batchNum        int
 
 	// A map from image name to its imageState.
+	// TODO 缓存这玩意是为了干嘛？
+	// key为Image镜像的名字
 	imageStates map[string]*imageState
 
 	nodeWorkers uint32
@@ -482,6 +492,7 @@ func (sc *SchedulerCache) setDefaultVolumeBinder() {
 }
 
 // newDefaultQueue init default queue
+// 如果K8S集群当中不存在默认的Queue资源，就创建一个默认Queue资源
 func newDefaultQueue(vcClient vcclient.Interface, defaultQueue string) {
 	reclaimable := true
 	defaultQue := vcv1beta1.Queue{
@@ -489,6 +500,8 @@ func newDefaultQueue(vcClient vcclient.Interface, defaultQueue string) {
 			Name: defaultQueue,
 		},
 		Spec: vcv1beta1.QueueSpec{
+			// 允许资源回收，也就是说Queue中的Job可能会使用超出Queue配额限制的资源，如其它的Queue资源不够用的时候，Reclaimable=true表示
+			// 可以回收当前Queue中多使用的资源，其实就是从Queue中驱逐一个合适的Job，释放相应资源
 			Reclaimable: &reclaimable,
 			Weight:      1,
 		},
@@ -500,8 +513,10 @@ func newDefaultQueue(vcClient vcclient.Interface, defaultQueue string) {
 		Factor:   1,
 		Jitter:   0.1,
 	}, func(err error) bool {
+		// 如果当前集群中不存在这个默认的Queue资源，就需要重试
 		return !apierrors.IsAlreadyExists(err)
 	}, func() error {
+		// 其实就是调用APIServer的接口创建默认的Queue资源
 		_, err := vcClient.SchedulingV1beta1().Queues().Create(context.TODO(), &defaultQue, metav1.CreateOptions{})
 		return err
 	})
@@ -510,7 +525,9 @@ func newDefaultQueue(vcClient vcclient.Interface, defaultQueue string) {
 	}
 }
 
-func newSchedulerCache(config *rest.Config, schedulerNames []string, defaultQueue string, nodeSelectors []string, nodeWorkers uint32, ignoredProvisioners []string) *SchedulerCache {
+func newSchedulerCache(config *rest.Config, schedulerNames []string, defaultQueue string, nodeSelectors []string,
+	nodeWorkers uint32, ignoredProvisioners []string) *SchedulerCache {
+
 	kubeClient, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		panic(fmt.Sprintf("failed init kubeClient, with err: %v", err))
@@ -524,10 +541,11 @@ func newSchedulerCache(config *rest.Config, schedulerNames []string, defaultQueu
 		panic(fmt.Sprintf("failed init eventClient, with err: %v", err))
 	}
 
-	// create default queue
+	// create default queue // 如果K8S集群当中不存在默认的Queue资源，就创建一个默认Queue资源
 	newDefaultQueue(vcClient, defaultQueue)
 	klog.Infof("Create init queue named default")
 
+	// 限速队列
 	errTaskRateLimiter := workqueue.NewMaxOfRateLimiter(
 		workqueue.NewItemExponentialFailureRateLimiter(5*time.Millisecond, 1000*time.Second),
 		&workqueue.BucketRateLimiter{Limiter: rate.NewLimiter(rate.Limit(100), 1000)},
@@ -593,7 +611,10 @@ func newSchedulerCache(config *rest.Config, schedulerNames []string, defaultQueu
 	}
 
 	// add all events handlers
+	// 1、重点就是这里了，Cache中各种资源Info的维护就是通过事件来完成的
+	// 2、其实就是通过SharedInformer机制的EventHandler来实现各种资源的Info信息的维护
 	sc.addEventHandler()
+
 	// finally, init default volume binder which has dependencies on other informers
 	sc.setDefaultVolumeBinder()
 	return sc
@@ -602,6 +623,8 @@ func newSchedulerCache(config *rest.Config, schedulerNames []string, defaultQueu
 func (sc *SchedulerCache) addEventHandler() {
 	informerFactory := informers.NewSharedInformerFactory(sc.kubeClient, 0)
 	sc.informerFactory = informerFactory
+
+	// TODO 多调度器是咋回事？
 	mySchedulerPodName, c := getMultiSchedulerInfo()
 
 	// explicitly register informers to the factory, otherwise resources listers cannot get anything
@@ -625,6 +648,7 @@ func (sc *SchedulerCache) addEventHandler() {
 	sc.nodeInformer = informerFactory.Core().V1().Nodes()
 	sc.nodeInformer.Informer().AddEventHandlerWithResyncPeriod(
 		cache.FilteringResourceEventHandler{
+			// 过滤出打了标签的节点
 			FilterFunc: func(obj interface{}) bool {
 				var node *v1.Node
 				switch t := obj.(type) {
@@ -656,6 +680,7 @@ func (sc *SchedulerCache) addEventHandler() {
 				klog.Infof("node %s ignore add/update/delete into schedulerCache", node.Name)
 				return false
 			},
+			// 处理Node资源的增删改查
 			Handler: cache.ResourceEventHandlerFuncs{
 				AddFunc:    sc.AddNode,
 				UpdateFunc: sc.UpdateNode,
@@ -670,6 +695,7 @@ func (sc *SchedulerCache) addEventHandler() {
 	sc.pvInformer = informerFactory.Core().V1().PersistentVolumes()
 	sc.scInformer = informerFactory.Storage().V1().StorageClasses()
 	sc.csiNodeInformer = informerFactory.Storage().V1().CSINodes()
+	// 处理CSINode资源的增删改查
 	sc.csiNodeInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc:    sc.AddOrUpdateCSINode,
@@ -687,6 +713,7 @@ func (sc *SchedulerCache) addEventHandler() {
 	sc.podInformer.Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
+				// 过滤出可以被当前调度器调度的Pod，其实就是看Pod的调度器指定的谁
 				switch v := obj.(type) {
 				case *v1.Pod:
 					if !responsibleForPod(v, sc.schedulerNames, mySchedulerPodName, c) {
@@ -784,9 +811,15 @@ func (sc *SchedulerCache) addEventHandler() {
 
 // Run  starts the schedulerCache
 func (sc *SchedulerCache) Run(stopCh <-chan struct{}) {
+	// 同步K8S相关的资源
 	sc.informerFactory.Start(stopCh)
+	// 同步Volcano相关的资源，主要是Job, Nodes, Queue相关信息
 	sc.vcInformerFactory.Start(stopCh)
+
+	// 等待K8S资源，Volcano定义的资源同步完成
 	sc.WaitForCacheSync(stopCh)
+
+	// 启动指定数量的协程消费queue中的数据
 	for i := 0; i < int(sc.nodeWorkers); i++ {
 		go wait.Until(sc.runNodeWorker, 0, stopCh)
 	}
@@ -797,6 +830,7 @@ func (sc *SchedulerCache) Run(stopCh <-chan struct{}) {
 	// Cleanup jobs.
 	go wait.Until(sc.processCleanupJob, 0, stopCh)
 
+	// TODO 似乎这里执行的是真正的绑定工作
 	go wait.Until(sc.processBindTask, time.Millisecond*20, stopCh)
 
 	// Get metrics data
@@ -1156,6 +1190,7 @@ func (sc *SchedulerCache) processSyncNode() bool {
 	if shutdown {
 		return false
 	}
+	// 如果没有错误，说明当前节点的Node已经同步完成，此时可以从队列中移除这个节点的同步
 	defer sc.nodeQueue.Done(obj)
 
 	nodeName, ok := obj.(string)
@@ -1165,6 +1200,7 @@ func (sc *SchedulerCache) processSyncNode() bool {
 	}
 
 	klog.V(5).Infof("started sync node %s", nodeName)
+	// TODO 一个节点的同步，需要同步哪些东西呢？
 	err := sc.SyncNode(nodeName)
 	if err == nil {
 		sc.nodeQueue.Forget(nodeName)

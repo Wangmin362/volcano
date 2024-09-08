@@ -167,7 +167,7 @@ func (bp *binpackPlugin) OnSessionOpen(ssn *framework.Session) {
 		klog.V(5).Infof("Leaving binpack plugin. %s ...", bp.weight.String())
 	}()
 	if klog.V(4).Enabled() {
-		notFoundResource := []string{}
+		var notFoundResource []string
 		for resource := range bp.weight.BinPackingResources {
 			found := false
 			for _, nodeInfo := range ssn.Nodes {

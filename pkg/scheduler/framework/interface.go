@@ -18,7 +18,7 @@ package framework
 
 // Action is the interface of scheduler action.
 type Action interface {
-	// The unique name of Action.
+	// Name The unique name of Action.
 	Name() string
 
 	// Initialize initializes the allocator plugins.
@@ -27,13 +27,13 @@ type Action interface {
 	// Execute allocates the cluster's resources into each queue.
 	Execute(ssn *Session)
 
-	// UnIntialize un-initializes the allocator plugins.
+	// UnInitialize un-initializes the allocator plugins.
 	UnInitialize()
 }
 
 // Plugin is the interface of scheduler plugin
 type Plugin interface {
-	// The unique name of Plugin.
+	// Name The unique name of Plugin.
 	Name() string
 
 	OnSessionOpen(ssn *Session)

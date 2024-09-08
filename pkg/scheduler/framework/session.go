@@ -70,8 +70,8 @@ type Session struct {
 	NodeMap   map[string]*k8sframework.NodeInfo
 	PodLister *PodLister
 
-	Tiers          []conf.Tier
-	Configurations []conf.Configuration
+	Tiers          []conf.Tier          // Plugin 插件
+	Configurations []conf.Configuration // Action 的配置文件
 	NodeList       []*api.NodeInfo
 
 	plugins           map[string]Plugin
