@@ -60,15 +60,17 @@ func GetPluginBuilder(name string) (PluginBuilder, bool) {
 }
 
 // LoadCustomPlugins loads custom implement plugins
-// TODO 插件注册原理是啥？
 func LoadCustomPlugins(pluginsDir string) error {
+	// 找到指定插件目录中的所有so文件
 	pluginPaths, _ := filepath.Glob(fmt.Sprintf("%s/*.so", pluginsDir))
 	for _, pluginPath := range pluginPaths {
 		pluginBuilder, err := loadPluginBuilder(pluginPath)
 		if err != nil {
 			return err
 		}
+		// 通过文件名截取当前插件的名字
 		pluginName := getPluginName(pluginPath)
+		// 插件的核心就是需要实现 func New(arguments framework.Arguments) framework.Plugin {}方法
 		RegisterPluginBuilder(pluginName, pluginBuilder)
 		klog.V(4).Infof("Custom plugin %s loaded", pluginName)
 	}
