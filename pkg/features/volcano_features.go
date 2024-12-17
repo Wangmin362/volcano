@@ -24,6 +24,8 @@ import (
 
 const (
 	// WorkLoadSupport can cache and operate **K8s native resource**, Deployment/Replicas/ReplicationController/StatefulSet resources currently.
+	// 1. 用于控制Volcano是否可以控制Deployment/Replica/StatefulSet资源
+	// TODO 2. 从目前的代码逻辑上来看，这个特性的开启主要是为了监听VolcanoJob资源的变化
 	WorkLoadSupport featuregate.Feature = "WorkLoadSupport"
 
 	// VolcanoJobSupport can identify and schedule volcano job.
@@ -33,6 +35,7 @@ const (
 	PodDisruptionBudgetsSupport featuregate.Feature = "PodDisruptionBudgetsSupport"
 
 	// QueueCommandSync supports queue command sync.
+	// 用于控制是否支持QueueCommand特性
 	QueueCommandSync featuregate.Feature = "QueueCommandSync"
 
 	// PriorityClass to provide the capacity of preemption at pod group level.

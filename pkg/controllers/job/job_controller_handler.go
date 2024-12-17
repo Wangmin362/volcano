@@ -47,6 +47,10 @@ func (cc *jobcontroller) addCommand(obj interface{}) {
 	cc.commandQueue.Add(cmd)
 }
 
+// 1. 把obj对象强制转换为VolcanoJob资源对象，如果转换失败直接退出
+// 2. 把job资源对象直接放入到JobCache当中缓存起来
+// 3. 计算当前job的jobKey，规则为: namespace/name
+// 4. 根据jobKey计算出哈希模上协程数量算出当前Job应该放入到那个队列当中，简单来说job应该放入到那个队列是通过jobKey的哈希以及协程的数量计算出来的
 func (cc *jobcontroller) addJob(obj interface{}) {
 	job, ok := obj.(*batch.Job)
 	if !ok {
@@ -54,25 +58,36 @@ func (cc *jobcontroller) addJob(obj interface{}) {
 		return
 	}
 
+	// 封装为Request参数放入到队列当中
 	req := apis.Request{
 		Namespace: job.Namespace,
 		JobName:   job.Name,
 
+		// TODO 这个事件有何用？
 		Event: bus.OutOfSyncEvent,
 	}
 
 	// TODO(k82cn): if failed to add job, the cache should be refresh
+	// 放入到JobCache当中
 	if err := cc.cache.Add(job); err != nil {
 		klog.Errorf("Failed to add job <%s/%s>: %v in cache",
 			job.Namespace, job.Name, err)
 	}
+	// jobKey的规则为：namespace/name
 	key := jobhelpers.GetJobKeyByReq(&req)
-	// 获取队列
+	// 1. 根据jobKey对应的哈希模上worker协程数量计算当前Job应该放入到那个队列当中
+	// 2. 这样可以避免多个协程之间并发竞争消费同一个Job
 	queue := cc.getWorkerQueue(key)
 	// 把当前的job放入到队列当中
 	queue.Add(req)
 }
 
+// 1. 把obj对象强制转换为Job资源对象，如果转换失败直接退出
+// 2. 判断新老job资源对象的版本号是否一致，如果一致，说明Job资源没有发生更改，直接退出
+// 3. 使用新的Job资源对象更新JobCache缓存
+// 4. 若新老Job资源对象的Spec完全相等，并且新老Job资源对象的Status.State.Phase相等，就认为当前Job不需要更新，忽略本次更新，直接退出
+// 5. 获取当前Job资源对象的Key, 规则为：namespace/name
+// 6. 根据资源对象的JobKey的哈希，以及消费Job资源协程的数量计算出来当前Job应该放入到那个队列当中
 func (cc *jobcontroller) updateJob(oldObj, newObj interface{}) {
 	newJob, ok := newObj.(*batch.Job)
 	if !ok {
@@ -111,11 +126,16 @@ func (cc *jobcontroller) updateJob(oldObj, newObj interface{}) {
 		JobName:   newJob.Name,
 		Event:     bus.OutOfSyncEvent,
 	}
+	// 获取当前Job资源对象的Key, 规则为：namespace/name
 	key := jobhelpers.GetJobKeyByReq(&req)
+	// 根据资源对象的JobKey的哈希，以及消费Job资源协程的数量计算出来当前Job应该放入到那个队列当中
 	queue := cc.getWorkerQueue(key)
 	queue.Add(req)
 }
 
+// 1. 把obj对象强制转换为Job资源对象，如果转换失败直接退出
+// 2. 直接从JobCache缓存中删除当前Job资源
+// 3. 这里需要注意的是，若一个VolcanoJob被删除之后，这里只会把JobCache更新了，不会把这个删除事件放入到队列当中
 func (cc *jobcontroller) deleteJob(obj interface{}) {
 	job, ok := obj.(*batch.Job)
 	if !ok {

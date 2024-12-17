@@ -51,7 +51,9 @@ func (ps *pendingState) Execute(action v1alpha1.Action) error {
 			return true
 		})
 	default:
+		// TODO 这里很核心的执行了SyncJob动作
 		return SyncJob(ps.job, func(status *vcbatch.JobStatus) bool {
+			// 若运行中的Pod数量 + 成功退出的Pod数量 + 执行失败的Job数量 大于等于最小要求的副本数量，就认为Job运行成功
 			if ps.job.Job.Spec.MinAvailable <= status.Running+status.Succeeded+status.Failed {
 				status.State.Phase = vcbatch.Running
 				return true

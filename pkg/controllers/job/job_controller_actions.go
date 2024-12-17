@@ -166,9 +166,13 @@ func (cc *jobcontroller) killJob(jobInfo *apis.JobInfo, podRetainPhase state.Pha
 	return nil
 }
 
+// 1. 初始化Job的状态为Pending状态，然后更新到APIServer当中，与此同时更新JobCahce
+// 2. 若当前Job配置了插件,那么执行Job的OnJobAdd方法
+// 3. 为当前Job创建合适的PVC, 并更新Job
+// 4. 如果当前Job的PodGroup资源不存在,创建PodGroup资源; 如果存在PodGroup资源就更新
 func (cc *jobcontroller) initiateJob(job *batch.Job) (*batch.Job, error) {
 	klog.V(3).Infof("Starting to initiate Job <%s/%s>", job.Namespace, job.Name)
-	// 初始化Job的状态为Pending状态，然后更新到APIServer当中
+	// 初始化Job的状态为Pending状态，然后更新到APIServer当中，与此同时更新JobCache
 	jobInstance, err := cc.initJobStatus(job)
 	if err != nil {
 		cc.recorder.Event(job, v1.EventTypeWarning, string(batch.JobStatusError),
@@ -183,7 +187,7 @@ func (cc *jobcontroller) initiateJob(job *batch.Job) (*batch.Job, error) {
 		return nil, err
 	}
 
-	// 为当前Job创建合适的PVC
+	// 为当前Job创建合适的PVC, 并更新Job
 	newJob, err := cc.createJobIOIfNotExist(jobInstance)
 	if err != nil {
 		cc.recorder.Event(job, v1.EventTypeWarning, string(batch.PVCError),
@@ -191,7 +195,7 @@ func (cc *jobcontroller) initiateJob(job *batch.Job) (*batch.Job, error) {
 		return nil, err
 	}
 
-	// 为当前Job创建PodGroup资源或者更新PodGroup资源
+	// 如果当前Job的PodGroup资源不存在,创建PodGroup资源; 如果存在PodGroup资源就更新
 	if err := cc.createOrUpdatePodGroup(newJob); err != nil {
 		cc.recorder.Event(job, v1.EventTypeWarning, string(batch.PodGroupError),
 			fmt.Sprintf("Failed to create PodGroup, err: %v", err))
@@ -201,6 +205,8 @@ func (cc *jobcontroller) initiateJob(job *batch.Job) (*batch.Job, error) {
 	return newJob, nil
 }
 
+// 1. 若Job配置了插件,执行插件的OnJobUpdate方法
+// 2. 如果当前Job的PodGroup资源不存在,创建PodGroup资源; 若存在,就更新PodGroup资源
 func (cc *jobcontroller) initOnJobUpdate(job *batch.Job) error {
 	klog.V(3).Infof("Starting to initiate Job <%s/%s> on update", job.Namespace, job.Name)
 
@@ -211,6 +217,7 @@ func (cc *jobcontroller) initOnJobUpdate(job *batch.Job) error {
 		return err
 	}
 
+	// 如果当前Job的PodGroup资源不存在,创建PodGroup资源; 若存在,就更新PodGroup资源
 	if err := cc.createOrUpdatePodGroup(job); err != nil {
 		cc.recorder.Event(job, v1.EventTypeWarning, string(batch.PodGroupError),
 			fmt.Sprintf("Failed to create PodGroup, err: %v", err))
@@ -229,6 +236,11 @@ func (cc *jobcontroller) GetQueueInfo(queue string) (*scheduling.Queue, error) {
 	return queueInfo, err
 }
 
+// TODO syncJob的逻辑异常复杂，有时间再慢慢分析，下面给一个粗略的逻辑
+// 1. 获取当前Job关联的队列
+// 2. 初始化Job的状态，判断当前Job的PodGroup资源是否创建，如果没有创建就创建PodGroup。如果创建了就更新PodGroup资源
+// 3. 遍历当前Job的Task，判断每个Pod是否已经创建，如果没有创建就创建对一个的Pod
+// 4. 通过APIServer接口更新Job状态，并同时更新JobCache
 func (cc *jobcontroller) syncJob(jobInfo *apis.JobInfo, updateStatus state.UpdateStatusFn) error {
 	job := jobInfo.Job
 	klog.V(3).Infof("Starting to sync up Job <%s/%s>, current version %d", job.Namespace, job.Name, job.Status.Version)
@@ -245,7 +257,8 @@ func (cc *jobcontroller) syncJob(jobInfo *apis.JobInfo, updateStatus state.Updat
 	job = job.DeepCopy()
 
 	// Find queue that job belongs to, and check if the queue has forwarding metadata
-	// 从ShardInformer中获取Job资源关联的Queue资源
+	// 1. 从ShardInformer中获取Job资源关联的Queue资源
+	// 2. TODO 这里获取的是什么队列？
 	queueInfo, err := cc.GetQueueInfo(job.Spec.Queue)
 	if err != nil {
 		return err
@@ -269,13 +282,17 @@ func (cc *jobcontroller) syncJob(jobInfo *apis.JobInfo, updateStatus state.Updat
 	// Skip job initiation if job is already initiated
 	// 如果Job还没有状态或者处于Pending，那么就需要初始化Job资源
 	if !isInitiated(job) {
-		// 初始化Job的状态，并且执行Job配置的插件的OnJobAdd方法，以及创建这个Job关联的PodGroup资源
+		// 1. 初始化Job的状态为Pending状态，然后更新到APIServer当中，与此同时更新JobCahce
+		// 2. 若当前Job配置了插件,那么执行Job的OnJobAdd方法
+		// 3. 为当前Job创建合适的PVC, 并更新Job
+		// 4. 如果当前Job的PodGroup资源不存在,创建PodGroup资源; 如果存在PodGroup资源就更新
 		if job, err = cc.initiateJob(job); err != nil {
 			return err
 		}
 	} else {
 		// TODO: optimize this call it only when scale up/down
-		// 如果已经初始化了，就需要更新Job资源
+		// 1. 若Job配置了插件,执行插件的OnJobUpdate方法
+		// 2. 如果当前Job的PodGroup资源不存在,创建PodGroup资源; 若存在,就更新PodGroup资源
 		if err = cc.initOnJobUpdate(job); err != nil {
 			return err
 		}
@@ -310,6 +327,7 @@ func (cc *jobcontroller) syncJob(jobInfo *apis.JobInfo, updateStatus state.Updat
 	var jobCondition batch.JobCondition
 	if !syncTask {
 		if updateStatus != nil {
+			// 如果为true，说明Job的状态发生了改变，此时需要更新相关时间
 			if updateStatus(&job.Status) {
 				job.Status.State.LastTransitionTime = metav1.Now()
 				jobCondition = newCondition(job.Status.State.Phase, &job.Status.State.LastTransitionTime)
@@ -323,6 +341,8 @@ func (cc *jobcontroller) syncJob(jobInfo *apis.JobInfo, updateStatus state.Updat
 				job.Namespace, job.Name, err)
 			return err
 		}
+
+		// Job发生了改变，所以需要更新JobCache
 		if e := cc.cache.Update(newJob); e != nil {
 			klog.Errorf("SyncJob - Failed to update Job %v/%v in cache:  %v",
 				newJob.Namespace, newJob.Name, e)
@@ -576,7 +596,7 @@ func (cc *jobcontroller) isDependsOnPodsReady(task string, job *batch.Job) bool 
 	return true
 }
 
-// 为当前Job创建合适的PVC
+// 为当前Job创建合适的PVC, 并更新Job
 func (cc *jobcontroller) createJobIOIfNotExist(job *batch.Job) (*batch.Job, error) {
 	// If PVC does not exist, create them for Job.
 	var needUpdate bool
@@ -665,6 +685,7 @@ func (cc *jobcontroller) createPVC(job *batch.Job, vcName string, volumeClaim *v
 	return nil
 }
 
+// 如果当前Job的PodGroup资源不存在,创建PodGroup资源; 若存在,就更新PodGroup资源
 func (cc *jobcontroller) createOrUpdatePodGroup(job *batch.Job) error {
 	// If PodGroup does not exist, create one for Job.
 	pgName := job.Name + "-" + string(job.UID)
@@ -830,7 +851,7 @@ func (cc *jobcontroller) calcPGMinResources(job *batch.Job) *v1.ResourceList {
 	return &minReq
 }
 
-// 初始化Job的状态为Pending状态，然后更新到APIServer当中
+// 初始化Job的状态为Pending状态，然后更新到APIServer当中，与此同时更新JobCache
 func (cc *jobcontroller) initJobStatus(job *batch.Job) (*batch.Job, error) {
 	if job.Status.State.Phase != "" {
 		return job, nil

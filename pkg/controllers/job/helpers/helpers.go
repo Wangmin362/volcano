@@ -116,6 +116,7 @@ func GenPVCName(jobName string) string {
 }
 
 // GetJobKeyByReq gets the key for the job request.
+// 获取当前Job资源对象的Key, 规则为：namespace/name
 func GetJobKeyByReq(req *apis.Request) string {
 	return fmt.Sprintf("%s/%s", req.Namespace, req.JobName)
 }

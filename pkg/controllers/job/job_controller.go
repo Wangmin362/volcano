@@ -58,6 +58,7 @@ import (
 )
 
 func init() {
+	// 注册JobController
 	framework.RegisterController(&jobcontroller{})
 }
 
@@ -110,16 +111,17 @@ type jobcontroller struct {
 
 	// queue that need to sync up
 	// 限速队列 + 延时队列
+	// TODO 队列的数量是由谁决定的?
 	queueList []workqueue.RateLimitingInterface
-	// TODO 命令队列是用来干嘛的？
+	// TODO 命令队列是用来干嘛的？ 根据之前的影响,似乎用户可以通过创建Command这种资源影响Volcano的行为
 	commandQueue workqueue.RateLimitingInterface
-	// 用于缓存Job信息
+	// job缓存本质上就是缓存了VolcanoJob相关的信息,并且缓存了Job相关的Pod信息
 	cache jobcache.Cache
 	// Job Event recorder
 	recorder record.EventRecorder
 
 	errTasks      workqueue.RateLimitingInterface
-	workers       uint32
+	workers       uint32 // 消费acjob协程的数量
 	maxRequeueNum int
 }
 
@@ -133,15 +135,16 @@ func (cc *jobcontroller) Initialize(opt *framework.ControllerOption) error {
 	cc.vcClient = opt.VolcanoClient
 
 	sharedInformers := opt.SharedInformerFactory
-	workers := opt.WorkerNum
+	workers := opt.WorkerNum // 用于消费acjob的worker的数量
 	// Initialize event client
+	// TODO 事件广播器这一块还需要重点看看原理
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(klog.Infof)
 	eventBroadcaster.StartRecordingToSink(&corev1.EventSinkImpl{Interface: cc.kubeClient.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(vcscheme.Scheme, v1.EventSource{Component: "vc-controller-manager"})
 
 	cc.informerFactory = sharedInformers
-	// TODO 每个worker一个队列么？
+	// TODO 每个worker一个队列, 当Job到来时到底应该分配给那个队列?
 	cc.queueList = make([]workqueue.RateLimitingInterface, workers)
 	cc.commandQueue = workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
 	cc.cache = jobcache.New()
@@ -160,17 +163,33 @@ func (cc *jobcontroller) Initialize(opt *framework.ControllerOption) error {
 	// 缓存volcano相关的资源信息
 	factory := informerfactory.NewSharedInformerFactory(cc.vcClient, 0)
 	cc.vcInformerFactory = factory
+	// 1. 用于控制Volcano是否可以控制Deployment/Replica/StatefulSet资源
+	// 2. Q: 这里难道可以不开启么? 如果不开启的话JobController是怎么感知Job的变化的? A: 从初始化的逻辑来看,目前只看到只有一个地方和这里
+	// 是相关联的，因此目前的理解，这个特性是必须要开启的，这样才能监听Job的变化.  另外，ctrl+G搜索了一下，确实默认就是开启的
 	if utilfeature.DefaultFeatureGate.Enabled(features.WorkLoadSupport) {
 		cc.jobInformer = factory.Batch().V1alpha1().Jobs()
 		cc.jobInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc:    cc.addJob, // 处理Job的新增
+			// 1. 把obj对象强制转换为VolcanoJob资源对象，如果转换失败直接退出
+			// 2. 把job资源对象直接放入到JobCache当中缓存起来
+			// 3. 计算当前job的jobKey，规则为: namespace/name
+			// 4. 根据jobKey计算出哈希模上协程数量算出当前Job应该放入到那个队列当中，简单来说job应该放入到那个队列是通过jobKey的哈希以及协程的数量计算出来的
+			AddFunc: cc.addJob,
+			// 1. 把obj对象强制转换为Job资源对象，如果转换失败直接退出
+			// 2. 判断新老job资源对象的版本号是否一致，如果一致，说明Job资源没有发生更改，直接退出
+			// 3. 使用新的Job资源对象更新JobCache缓存
+			// 4. 若新老Job资源对象的Spec完全相等，并且新老Job资源对象的Status.State.Phase相等，就认为当前Job不需要更新，忽略本次更新，直接退出
+			// 5. 获取当前Job资源对象的Key, 规则为：namespace/name
+			// 6. 根据资源对象的JobKey的哈希，以及消费Job资源协程的数量计算出来当前Job应该放入到那个队列当中
 			UpdateFunc: cc.updateJob,
+			// 1. 把obj对象强制转换为Job资源对象，如果转换失败直接退出
+			// 2. 直接从JobCache缓存中删除当前Job资源
 			DeleteFunc: cc.deleteJob,
 		})
 		cc.jobLister = cc.jobInformer.Lister()
 		cc.jobSynced = cc.jobInformer.Informer().HasSynced
 	}
 
+	// TODO QueueCommand到底是干嘛的?
 	if utilfeature.DefaultFeatureGate.Enabled(features.QueueCommandSync) {
 		cc.cmdInformer = factory.Bus().V1alpha1().Commands()
 		cc.cmdInformer.Informer().AddEventHandler(
@@ -244,7 +263,9 @@ func (cc *jobcontroller) Initialize(opt *framework.ControllerOption) error {
 
 // Run start JobController.
 func (cc *jobcontroller) Run(stopCh <-chan struct{}) {
+	// 启动K8S自己的SharedInformer
 	cc.informerFactory.Start(stopCh)
+	// 启动Volcano的SharedInformer
 	cc.vcInformerFactory.Start(stopCh)
 
 	// 等待K8S的资源同步完成
@@ -263,8 +284,9 @@ func (cc *jobcontroller) Run(stopCh <-chan struct{}) {
 		}
 	}
 
-	// 处理命令
+	// 处理命令, 如果QueueCommandSync特性没有开启,会影响这里么
 	go wait.Until(cc.handleCommands, 0, stopCh)
+
 	for i := uint32(0); i < cc.workers; i++ {
 		go func(num uint32) {
 			wait.Until( // 每秒钟执行一次，直到停止信号
@@ -277,6 +299,8 @@ func (cc *jobcontroller) Run(stopCh <-chan struct{}) {
 		}(i)
 	}
 
+	// 开始运行,job缓存接下来将会收集job, pod相关信息
+	// TODO 干了啥？
 	go cc.cache.Run(stopCh)
 
 	// Re-sync error tasks.
@@ -304,6 +328,7 @@ func (cc *jobcontroller) belongsToThisRoutine(key string, count uint32) bool {
 	return val%cc.workers == count
 }
 
+// 根据资源对象的JobKey的哈希，以及消费Job资源协程的数量计算出来当前Job应该放入到那个队列当中
 func (cc *jobcontroller) getWorkerQueue(key string) workqueue.RateLimitingInterface {
 	var hashVal hash.Hash32
 	var val uint32
@@ -320,8 +345,15 @@ func (cc *jobcontroller) getWorkerQueue(key string) workqueue.RateLimitingInterf
 	return queue
 }
 
+// 1. count可以理解为自己的编号，从0开始，每个协程的编号都不一样，每个协程都有自己的队列，每个协程只负责消费自己队列中的VolcanoJob即可
+// 2. 从自己的队列当中获取Job Req资源对象，这个资源对象基本没有带什么信息，还需要从JobCache中获取全量信息的Job资源对象
+// 3. 根据JobKey从JobCache中获取全量信息的Job资源
+// 4. 根据获取到的Job资源对象获取去状态
 func (cc *jobcontroller) processNextReq(count uint32) bool {
+	// 每个协程都有自己单独的队列
 	queue := cc.queueList[count]
+	// 1. 这里是一个阻塞式的API, 如果队列中没有Job,将会一直被阻塞在这里,直到有真正的Job到来
+	// 2. Q: 这个队列中的数据是什么时候放入的? A: 猜测应该是VCJob的Informer监听到有Job的变更事件后,会放入到队列当中
 	obj, shutdown := queue.Get()
 	if shutdown {
 		klog.Errorf("Fail to pop item from queue")
@@ -329,10 +361,14 @@ func (cc *jobcontroller) processNextReq(count uint32) bool {
 	}
 
 	req := obj.(apis.Request)
+	// TODO 有空好好研究下Client的延迟队列
 	defer queue.Done(req)
 
+	// 这里的key一般就是namespace/name
 	key := jobcache.JobKeyByReq(&req)
-	// 判断当前worker是否应该处理这个Job，其实之前的哈希函数只要确保了计算正确，这里一般都不会改变
+	// 1. 判断当前worker是否应该处理这个Job，其实之前的哈希函数只要确保了计算正确，这里一般都不会改变
+	// 2. 从这里可以看出jobInformer收到Job变更事件之后是如何放入到队列当中的,虽然有多个worker,但是这里通过jobKey计算出hash,然后模上
+	// worker的数量,就可以确定当前job应该放入到那个队列. 这样多个协程就不会并发的处理相同的Job
 	if !cc.belongsToThisRoutine(key, count) {
 		klog.Errorf("should not occur The job does not belongs to this routine key:%s, worker:%d...... ", key, count)
 		queueLocal := cc.getWorkerQueue(key)
@@ -342,7 +378,9 @@ func (cc *jobcontroller) processNextReq(count uint32) bool {
 
 	klog.V(3).Infof("Try to handle request <%v>", req)
 
-	// 获取当前job的jobInfo
+	// 1. 从JobCache获取当前job的jobInfo
+	// 2. 由于JobController收到Job的删除事件之后直接从JobCache中删除了这个Job资源对象，没有在队列中放入删除事件。所以正常情况下，
+	// 这里都可以根据JobKey找到对应资源对象
 	jobInfo, err := cc.cache.Get(key)
 	if err != nil {
 		// TODO(k82cn): ignore not-ready error.
@@ -358,7 +396,9 @@ func (cc *jobcontroller) processNextReq(count uint32) bool {
 		return true
 	}
 
-	// TODO 获取Job的Action
+	// TODO 1. 获取Job的Action 目前从代码来看，Action似乎和Volcano的Command资源有关
+	// 2. 从代码来看，Action可以改变Job的状态
+	// 3. 一般情况下，这里获取到的Action为SyncJobAction
 	action := applyPolicies(jobInfo.Job, &req)
 	klog.V(3).Infof("Execute <%v> on Job <%s/%s> in <%s> by <%T>.",
 		action, req.Namespace, req.JobName, jobInfo.Job.Status.State.Phase, st)
@@ -368,6 +408,7 @@ func (cc *jobcontroller) processNextReq(count uint32) bool {
 			"Start to execute action %s ", action))
 	}
 
+	// TODO 执行Action
 	if err := st.Execute(action); err != nil {
 		if cc.maxRequeueNum == -1 || queue.NumRequeues(req) < cc.maxRequeueNum {
 			klog.V(2).Infof("Failed to handle Job <%s/%s>: %v",

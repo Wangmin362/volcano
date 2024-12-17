@@ -50,6 +50,7 @@ func (cc *jobcontroller) pluginOnJobAdd(job *batch.Job) error {
 	if job.Status.ControlledResources == nil {
 		job.Status.ControlledResources = make(map[string]string)
 	}
+	// TODO 插件原理是啥？
 	for name, args := range job.Spec.Plugins {
 		pb, found := plugins.GetPluginBuilder(name)
 		if !found {

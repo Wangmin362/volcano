@@ -30,8 +30,9 @@ type Request struct {
 	TaskName  string
 	QueueName string
 
-	Event      v1alpha1.Event
-	ExitCode   int32
+	Event    v1alpha1.Event
+	ExitCode int32
+	// TODO 这个Action有啥用？ 什么时候会被设置？  从代码来看，这个Action似乎和CommandQueue有关系，暂时忽略这玩意
 	Action     v1alpha1.Action
 	JobVersion int32
 }

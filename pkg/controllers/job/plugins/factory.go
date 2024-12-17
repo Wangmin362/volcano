@@ -40,12 +40,14 @@ func init() {
 var pluginMutex sync.Mutex
 
 // Plugin management.
+// v1.9版本当中一共注册了哪些插件? v1.9版本当中注册了ssh, env, svc, tensorflow, mpi, pytorch插件
 var pluginBuilders = map[string]PluginBuilder{}
 
 // PluginBuilder func prototype.
 type PluginBuilder func(pluginsinterface.PluginClientset, []string) pluginsinterface.PluginInterface
 
 // RegisterPluginBuilder register plugin builders.
+// v1.9版本当中注册了ssh, env, svc, tensorflow, mpi, pytorch插件
 func RegisterPluginBuilder(name string, pc PluginBuilder) {
 	pluginMutex.Lock()
 	defer pluginMutex.Unlock()

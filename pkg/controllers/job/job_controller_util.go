@@ -157,10 +157,12 @@ func createJobPod(job *batch.Job, template *v1.PodTemplateSpec, topologyPolicy b
 }
 
 func applyPolicies(job *batch.Job, req *apis.Request) v1alpha1.Action {
+	// 一般情况下，这里就是空的
 	if len(req.Action) != 0 {
 		return req.Action
 	}
 
+	// 一般情况下，这里就是True
 	if req.Event == v1alpha1.OutOfSyncEvent {
 		return v1alpha1.SyncJobAction
 	}

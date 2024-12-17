@@ -24,6 +24,7 @@ import (
 )
 
 // Cache Interface.
+// TODO job缓存本质上就是缓存了VolcanoJob相关的信息,并且缓存了Job相关的Pod信息
 type Cache interface {
 	Run(stopCh <-chan struct{})
 
@@ -33,10 +34,12 @@ type Cache interface {
 	Update(obj *v1alpha1.Job) error
 	Delete(obj *v1alpha1.Job) error
 
+	// AddPod Pod上有一个volcano.sh/job-name注解,用于表明当前的Pod到底是属于哪个Job
 	AddPod(pod *v1.Pod) error
 	UpdatePod(pod *v1.Pod) error
 	DeletePod(pod *v1.Pod) error
 
+	// Task本质上和Pod区别不大,可以把Task映射到Pod上
 	TaskCompleted(jobKey, taskName string) bool
 	TaskFailed(jobKey, taskName string) bool
 }

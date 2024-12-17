@@ -33,10 +33,12 @@ import (
 	"volcano.sh/volcano/pkg/controllers/apis"
 )
 
+// TODO job缓存本质上就是缓存了VolcanoJob相关的信息,并且缓存了Job相关的Pod信息
 type jobCache struct {
 	sync.Mutex
 
-	jobs        map[string]*apis.JobInfo // key为job名字
+	jobs map[string]*apis.JobInfo // key为job名字
+	// TODO 这个属性是干嘛用的?
 	deletedJobs workqueue.RateLimitingInterface
 }
 
