@@ -22,7 +22,13 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// TODO 这里注册了哪些controller?
+// 1. GarbageCollectorController注册
+// 2. JobController注册
+// 3. JobFlowController注册
+// 4. JobTemplateController注册
+// 5. PodGroupController注册
+// 6. QueueController注册
+// 7. 注册原理就是每个Controller在自己的init函数当中实现注册原理
 var controllers = map[string]Controller{}
 
 // ForeachController is helper function to operator all controllers.
@@ -33,7 +39,13 @@ func ForeachController(fn func(controller Controller)) {
 }
 
 // RegisterController register controller to the controller manager.
-// 注册Controller，这些Controller将会处理自己关心的资源
+// 1. 注册Controller，这些Controller将会处理自己关心的资源
+// 2. GarbageCollectorController注册
+// 3. JobController注册
+// 4. JobFlowController注册
+// 5. JobTemplateController注册
+// 6. PodGroupController注册
+// 7. QueueController注册
 func RegisterController(ctrl Controller) error {
 	if ctrl == nil {
 		return fmt.Errorf("controller is nil")

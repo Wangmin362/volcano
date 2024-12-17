@@ -128,11 +128,12 @@ func startControllers(config *rest.Config, opt *options.ServerOption) func(ctx c
 	controllerOpt.SchedulerNames = opt.SchedulerNames
 	// TODO 可以简单理解为Job资源的worker数量
 	controllerOpt.WorkerNum = opt.WorkerThreads
+	// 资源重新进入队列的最大次数
 	controllerOpt.MaxRequeueNum = opt.MaxRequeueNum
 
 	// TODO: add user agent for different controllers
 	controllerOpt.KubeClient = kubeclientset.NewForConfigOrDie(config)
-	// TODO 这玩意是用来干嘛的？
+	// VolcanoClient用于查询Volcano自定义的资源
 	controllerOpt.VolcanoClient = vcclientset.NewForConfigOrDie(config)
 	controllerOpt.SharedInformerFactory = informers.NewSharedInformerFactory(controllerOpt.KubeClient, 0)
 	// 用于设置pod是否继承PodGroup资源的注解，默认是继承注解的
@@ -141,8 +142,12 @@ func startControllers(config *rest.Config, opt *options.ServerOption) func(ctx c
 	controllerOpt.WorkerThreadsForPG = opt.WorkerThreadsForPG
 
 	return func(ctx context.Context) {
-		// TODO 会启动哪些controller?
+		// 目前启动的Controller有: GarbageCollectorController, JobController, JobFlowController, JobTemplateController,
+		// PodGroupController,QueueController
 		framework.ForeachController(func(c framework.Controller) {
+			// 当前这个匿名函数,主要是为了抽象出对于各种不同的Controller相同的启动方式. 其实从Controller的抽象模型上来看,Controller的
+			// 运行方式就决定了大致是通过如下方式进行初始化以及运行的
+
 			// 初始化controller
 			if err := c.Initialize(controllerOpt); err != nil {
 				klog.Errorf("Failed to initialize controller <%s>: %v", c.Name(), err)

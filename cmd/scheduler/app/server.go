@@ -67,7 +67,7 @@ func Run(opt *options.ServerOption) error {
 		version.PrintVersionAndExit()
 	}
 
-	// 根据kubeconfig配置文件，构建APIServer客户端
+	// 根据kubeconfig配置文件，构建APIServer客户端需要的rest.Config配置
 	config, err := kube.BuildConfig(opt.KubeClientOptions)
 	if err != nil {
 		return err
@@ -75,6 +75,9 @@ func Run(opt *options.ServerOption) error {
 
 	// TODO 如何配置了插件目录，那么Volcano Scheduler在启动的时候需要加载用户配置的插件
 	if opt.PluginsDir != "" {
+		// TODO 用户自定义插件加载原理
+		// TODO 自定义插件原理
+		// TODO 这个特性是什么时候加入的？
 		err := framework.LoadCustomPlugins(opt.PluginsDir)
 		if err != nil {
 			klog.Errorf("Fail to load custom plugins: %v", err)

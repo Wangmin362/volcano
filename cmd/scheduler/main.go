@@ -69,6 +69,7 @@ func main() {
 		}
 	}
 
+	// 刷新日志，这里应该是一个落盘操作，底层调用的应该是linux内核的flush接口
 	go wait.Until(klog.Flush, *logFlushFreq, wait.NeverStop)
 	defer klog.Flush()
 

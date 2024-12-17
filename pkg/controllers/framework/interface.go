@@ -35,20 +35,30 @@ type ControllerOption struct {
 	SharedInformerFactory informers.SharedInformerFactory
 	// volcano支持给调度器指定多个调度器名称，因该是为了处理不同的场景，可以给调度器赋予一定的语义，但是都指向同样的调度器
 	SchedulerNames []string
-	WorkerNum      uint32
-	MaxRequeueNum  int
+	// 用于消费acjob的worker的数量
+	WorkerNum uint32
+	// 最大重新入队的次数
+	MaxRequeueNum int
 
 	// TODO 这玩意是干嘛的？
+	// 猜测这玩意是用于控制当Controller监听到vcjob的时候，创建PG资源时是否需要同步注解到PG以及Pod上面
 	InheritOwnerAnnotations bool
-	WorkerThreadsForPG      uint32
+	// TODO 这玩意又是干嘛的？
+	WorkerThreadsForPG uint32
 }
 
 // Controller is the interface of all controllers.
 // TODO 如何理解这里的Controller抽象？ 似乎是用于抽象一种控制逻辑，这种控制逻辑需要初始化，然后才能运行
-// 在volcano中，我觉得一个Controller其实就是对于一种资源的Controller，比如JobController就是对Job资源的Controller
+// 1. 在volcano中，每一个Controller其实就是对于一种资源的Controller，比如JobController就是对Job资源的Controller
+// 2. 目前注册的Controller有GarbageCollectorController, JobController, JobFlowController, JobTemplateController,
+// PodGroupController,QueueController
 type Controller interface {
+	// Name 获取当前Controller的名字，显然，每个Controller的名字必须不一样，否则会有冲突，注册的时候就会报错
 	Name() string
+	// Initialize 用于初始化Controller，一般来说Controller都需要kubeClient, VolcanoClient等参数，这些共性的参数会被封装到
+	// ControllerOption当中，。
 	Initialize(opt *ControllerOption) error
 	// Run run the controller
+	// 1. 真正运行Controller， 一般来说就是监听某种资源，然后对这种资源的变更做处理
 	Run(stopCh <-chan struct{})
 }

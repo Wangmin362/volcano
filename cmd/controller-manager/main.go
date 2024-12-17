@@ -75,6 +75,7 @@ func main() {
 	// 最后退出的时候，可能内存中还有日志没有刷新到磁盘，因此这里在退出的时候还需要在执行一次，防止日志信息的丢失
 	defer klog.Flush()
 
+	// Controller的核心流程在这里,后续会启动gcController, jobController, pgController等等完成对于这些资源的处理
 	if err := app.Run(s); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
