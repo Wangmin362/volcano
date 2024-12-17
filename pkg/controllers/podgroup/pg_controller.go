@@ -71,7 +71,7 @@ type pgcontroller struct {
 	// A store of replicaset
 	rsSynced func() bool
 
-	// 用来存放queue
+	// 队列中存放的是Pod的变化
 	queue workqueue.RateLimitingInterface
 
 	schedulerNames []string
@@ -101,7 +101,7 @@ func (pg *pgcontroller) Initialize(opt *framework.ControllerOption) error {
 	pg.podInformer = opt.SharedInformerFactory.Core().V1().Pods()
 	pg.podLister = pg.podInformer.Lister()
 	pg.podSynced = pg.podInformer.Informer().HasSynced
-	// 似乎只有Pod的变化会更新到queue
+	// 只有Pod的变化会更新到queue
 	pg.podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: pg.addPod, // 只关心Pod的事件
 	})
@@ -126,6 +126,7 @@ func (pg *pgcontroller) Initialize(opt *framework.ControllerOption) error {
 
 // Run start NewPodgroupController.
 func (pg *pgcontroller) Run(stopCh <-chan struct{}) {
+	// 等待资源同步完成
 	pg.informerFactory.Start(stopCh)
 	pg.vcInformerFactory.Start(stopCh)
 
@@ -146,6 +147,10 @@ func (pg *pgcontroller) Run(stopCh <-chan struct{}) {
 	// 启动指定数量的协程，消费队列中的PogGroup资源
 	// TODO 为什么这里的队列设计和Job中的队列设计不一样
 	for i := 0; i < int(pg.workers); i++ {
+		// 1. 从队列中取出变化的Pod, 如果队列中没有变化的Pod，那么这里将会阻塞
+		// 2. 若当前Pod指定的调度器不是volcano，说明这个Pod的相关的活动不归自己管，直接跳过
+		// 3. 从Pod的注解中获取scheduling.k8s.io/group-name注解，判断是否为空，如果非空，说明当前Pod对应的PodGroup已经创建，直接退出
+		// 4. 如果上一步判断这个注解为空，那么创建PodGroup
 		go wait.Until(pg.worker, 0, stopCh)
 	}
 
@@ -157,6 +162,10 @@ func (pg *pgcontroller) worker() {
 	}
 }
 
+// 1. 从队列中取出变化的Pod, 如果队列中没有变化的Pod，那么这里将会阻塞
+// 2. 若当前Pod指定的调度器不是volcano，说明这个Pod的相关的活动不归自己管，直接跳过
+// 3. 从Pod的注解中获取scheduling.k8s.io/group-name注解，判断是否为空，如果非空，说明当前Pod对应的PodGroup已经创建，直接退出
+// 4. 如果上一步判断这个注解为空，那么创建PodGroup
 func (pg *pgcontroller) processNextReq() bool {
 	obj, shutdown := pg.queue.Get()
 	if shutdown {
