@@ -66,6 +66,9 @@ type Scheduler struct {
 }
 
 // NewScheduler returns a Scheduler
+// 1. 如果给Scheduler配置的配置文件，那么需要监听这个配置文件，以实现热加载
+// 2. 实例化缓存，这个缓存中缓存的内容比较丰富，缓存了Job, Queue, Nodes, PV, PVC, CSINode, PriorityClass等等所有可以影响调度相关的信息
+// 3. 实例化一个调度器，这个调度在在初始化的过程中没有做特别的初始化
 func NewScheduler(config *rest.Config, opt *options.ServerOption) (*Scheduler, error) {
 	var watcher filewatcher.FileWatcher
 	// 如果给Scheduler配置的配置文件，那么需要监听这个配置文件，以实现热加载

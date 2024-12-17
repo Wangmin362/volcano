@@ -60,6 +60,7 @@ func GetPluginBuilder(name string) (PluginBuilder, bool) {
 }
 
 // LoadCustomPlugins loads custom implement plugins
+// TODO 插件注册原理是啥？
 func LoadCustomPlugins(pluginsDir string) error {
 	pluginPaths, _ := filepath.Glob(fmt.Sprintf("%s/*.so", pluginsDir))
 	for _, pluginPath := range pluginPaths {

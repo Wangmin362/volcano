@@ -45,7 +45,7 @@ import (
 var logFlushFreq = pflag.Duration("log-flush-frequency", 5*time.Second, "Maximum number of seconds between log flushes")
 
 func main() {
-	// TODO 有必要显示写这个么？ 默认就是CPU的核心数量么
+	// 一般来说，runtime.GOMAXPROCS默认就是CPU核心的数量，但是这个值可以通过环境变量来设置，因此可能会改变。这里手动设置为CPU的核心数
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	klog.InitFlags(nil)
