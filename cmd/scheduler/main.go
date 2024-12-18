@@ -53,16 +53,19 @@ func main() {
 	// Scheduler参数初始化
 	s := options.NewServerOption()
 	s.AddFlags(pflag.CommandLine)
+	// 所谓的注册参数,其实就是把volcano参数保存在全局变量当中
 	s.RegisterOptions()
 
 	// 解析参数
 	cliflag.InitFlags()
-	// 校验参数是否有效
+	// 校验参数是否有效,若打开了EnableLeaderElection参数,但是没有配置LockObjectNamespace参数会直接退出
 	if err := s.CheckOptionOrDie(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 
+	// 如果配置了证书,但是证书解析或者校验失败,直接退出
+	// TODO 这里的证书用在了什么地方?
 	if s.CaCertFile != "" && s.CertFile != "" && s.KeyFile != "" {
 		if err := s.ParseCAFiles(nil); err != nil {
 			klog.Fatalf("Failed to parse CA file: %v", err)

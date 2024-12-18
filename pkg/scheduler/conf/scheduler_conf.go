@@ -17,7 +17,9 @@ limitations under the License.
 package conf
 
 // EnabledActionMap check if a action exist in scheduler configmap. If not exist the value is false.
-// 1、调度器当前启用的Action
+// 1. 调度器当前启用的Action
+// 2. 这个值在调度器runOnce当中设置
+// TODO 这玩意有啥用？
 var EnabledActionMap map[string]bool
 
 // SchedulerConfiguration defines the configuration of scheduler.

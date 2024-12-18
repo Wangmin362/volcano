@@ -67,15 +67,24 @@ func Run(opt *options.ServerOption) error {
 		version.PrintVersionAndExit()
 	}
 
-	// 根据kubeconfig配置文件，构建APIServer客户端需要的rest.Config配置
+	// 根据kubeConfig配置文件，构建APIServer客户端需要的rest.Config配置
 	config, err := kube.BuildConfig(opt.KubeClientOptions)
 	if err != nil {
 		return err
 	}
 
-	// TODO 如何配置了插件目录，那么Volcano Scheduler在启动的时候需要加载用户配置的插件
+	// 1. 如果配置了插件目录，那么Volcano Scheduler在启动的时候需要加载用户配置的插件,这里的插件指的是volcano framework Plugin,
+	// 而不是Job的Plugin.
+	// 2. 用户可以根据自己的需要Plugin,然后通过go plugin的方式把插件编译为so文件,放置在当前配置的目录当中. volcano启动之后会自动加载
+	// 这个目录下所有so文件, 并判断这个so文件是否是一个合法的volcano插件,目前看来,只要实现了New方法,并且能够强制转换为PluginBuilder就认为是
+	// volcano插件
+	// 3. 对于晟腾的NPU, 目前注册了vo
 	if opt.PluginsDir != "" {
-		// 这里纯粹就是使用go plugin的方式动态加载.so文件，这些.so文件其实就是golang的插件
+		// 1. 这里纯粹就是使用go plugin的方式动态加载.so文件，这些.so文件其实就是golang的插件
+		// 2. 遍历当前配置的插件目录中所有的so文件,
+		// 3. 判断当前路径的插件是否实现了New方法, 如果实现了就把这个插件强转为一个PluginBuilder类型
+		// 4. 通过插件的路径名截取出插件的名字,也就是说插件的名字其实就是so文件的文件名
+		// 5. 把插件注册到全局变量pluginBuilders当中,其实就是一个Map
 		err := framework.LoadCustomPlugins(opt.PluginsDir)
 		if err != nil {
 			klog.Errorf("Fail to load custom plugins: %v", err)

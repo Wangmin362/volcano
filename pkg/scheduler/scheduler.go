@@ -54,6 +54,36 @@ type Scheduler struct {
 
 	mutex sync.Mutex
 	// TODO 如何自定义Action?
+	// 1. volcano的配置文件一般如下所示
+	/*
+	   actions: "enqueue, allocate, backfill"
+	   tiers:
+	   - plugins:
+	     - name: priority
+	       enableNodeOrder: false
+	     - name: gang
+	       enableNodeOrder: false
+	     - name: conformance
+	       enableNodeOrder: false
+	     - name: volcano-npu_v6.0.RC1_linux-x86_64
+	   - plugins:
+	     - name: drf
+	       enableNodeOrder: false
+	     - name: predicates
+	       enableNodeOrder: false
+	       arguments:
+	         predicate.GPUSharingEnable: false
+	         predicate.GPUNumberEnable: false
+	     - name: proportion
+	       enableNodeOrder: false
+	     - name: nodeorder
+	     - name: binpack
+	       enableNodeOrder: false
+	   configurations:
+	     - name: init-params
+	       arguments: {"grace-over-time":"900","presetVirtualDevice":"true","nslb-version":"1.0","shared-tor-num":"2",
+	   "useClusterInfoManager":"true","super-pod-size": "48", "reserve-nodes": "2"}
+	*/
 	actions []framework.Action
 	// TODO 如何自定义插件
 	plugins []conf.Tier
@@ -113,14 +143,17 @@ func (pc *Scheduler) Run(stopCh <-chan struct{}) {
 
 	// Start cache for policy.
 	pc.cache.SetMetricsConf(pc.metricsConf)
-	// 启动Cache
+	// 启动Cache,等待Informer中的数据同步完成 TODO 这里是在干什么?
 	pc.cache.Run(stopCh)
 	// 等待K8S资源以及Volcano定义的资源同步完成，当然这里同步的资源肯定不是所有的资源，而是Scheduler关心的资源
 	pc.cache.WaitForCacheSync(stopCh)
 	klog.V(2).Infof("Scheduler completes Initialization and start to run")
+
 	// TODO 核心在这里
-	// schedulePeriod默认为1秒，也就是volcano默认调度器每秒钟执行一次调度
+	// 1. schedulePeriod默认为1秒，也就是volcano默认调度器每秒钟执行一次调度
 	go wait.Until(pc.runOnce, pc.schedulePeriod, stopCh)
+
+	// TODO 这里应该类似于kernel dump, 主要目的应该是为了排查问题
 	if options.ServerOpts.EnableCacheDumper {
 		pc.dumper.ListenForSignal(stopCh)
 	}
@@ -137,6 +170,7 @@ func (pc *Scheduler) runOnce() {
 	scheduleStartTime := time.Now()
 	defer klog.V(4).Infof("End scheduling ...")
 
+	// 使用当前时刻配置的Action以及Plugin, 因为在调度的过程中Volcano配置文件可能会发生更改
 	pc.mutex.Lock()
 	actions := pc.actions               // 用户配置的action
 	plugins := pc.plugins               // 用于配置的plugin
@@ -145,6 +179,7 @@ func (pc *Scheduler) runOnce() {
 
 	// Load ConfigMap to check which action is enabled.
 	conf.EnabledActionMap = make(map[string]bool)
+	// TODO 如果用户一分钟前开启了某个Action, 后面删除了这个Action, 这里是否会有问题
 	for _, action := range actions {
 		conf.EnabledActionMap[action.Name()] = true
 	}
@@ -156,6 +191,36 @@ func (pc *Scheduler) runOnce() {
 		metrics.UpdateE2eDuration(metrics.Duration(scheduleStartTime))
 	}()
 
+	// volcano目前的配置如下：
+	/*
+	   actions: "enqueue, allocate, backfill"
+	   tiers:
+	   - plugins:
+	     - name: priority
+	       enableNodeOrder: false
+	     - name: gang
+	       enableNodeOrder: false
+	     - name: conformance
+	       enableNodeOrder: false
+	     - name: volcano-npu_v6.0.RC1_linux-x86_64
+	   - plugins:
+	     - name: drf
+	       enableNodeOrder: false
+	     - name: predicates
+	       enableNodeOrder: false
+	       arguments:
+	         predicate.GPUSharingEnable: false
+	         predicate.GPUNumberEnable: false
+	     - name: proportion
+	       enableNodeOrder: false
+	     - name: nodeorder
+	     - name: binpack
+	       enableNodeOrder: false
+	   configurations:
+	     - name: init-params
+	       arguments: {"grace-over-time":"900","presetVirtualDevice":"true","nslb-version":"1.0","shared-tor-num":"2",
+	   "useClusterInfoManager":"true","super-pod-size": "48", "reserve-nodes": "2"}
+	*/
 	for _, action := range actions {
 		actionStartTime := time.Now()
 		action.Execute(ssn)

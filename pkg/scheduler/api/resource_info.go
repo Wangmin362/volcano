@@ -55,6 +55,7 @@ type Resource struct {
 	Memory   float64
 
 	// ScalarResources
+	// TODO 这里的标量资源,是否就是NPU这样的设备资源
 	ScalarResources map[v1.ResourceName]float64
 
 	// MaxTaskNum is only used by predicates; it should NOT

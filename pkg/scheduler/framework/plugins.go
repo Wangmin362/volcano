@@ -60,10 +60,15 @@ func GetPluginBuilder(name string) (PluginBuilder, bool) {
 }
 
 // LoadCustomPlugins loads custom implement plugins
+// 1. 遍历当前配置的插件目录中所有的so文件,
+// 2. 判断当前路径的插件是否实现了New方法, 如果实现了就把这个插件强转为一个PluginBuilder类型
+// 3. 通过插件的路径名截取出插件的名字,也就是说插件的名字其实就是so文件的文件名
+// 4. 把插件注册到全局变量pluginBuilders当中,其实就是一个Map
 func LoadCustomPlugins(pluginsDir string) error {
 	// 找到指定插件目录中的所有so文件
 	pluginPaths, _ := filepath.Glob(fmt.Sprintf("%s/*.so", pluginsDir))
 	for _, pluginPath := range pluginPaths {
+		// 判断当前路径的插件是否实现了New方法, 如果实现了就把这个插件强转为一个PluginBuilder类型
 		pluginBuilder, err := loadPluginBuilder(pluginPath)
 		if err != nil {
 			return err
@@ -82,6 +87,7 @@ func getPluginName(pluginPath string) string {
 	return strings.TrimSuffix(filepath.Base(pluginPath), filepath.Ext(pluginPath))
 }
 
+// 判断当前路径的插件是否实现了New方法, 如果实现了就把这个插件强转为一个PluginBuilder类型
 func loadPluginBuilder(pluginPath string) (PluginBuilder, error) {
 	plug, err := plugin.Open(pluginPath)
 	if err != nil {

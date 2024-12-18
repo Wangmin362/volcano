@@ -164,6 +164,7 @@ func (s *ServerOption) CheckOptionOrDie() error {
 }
 
 // RegisterOptions registers options.
+// 所谓的注册参数,其实就是把volcano参数保存在全局变量当中
 func (s *ServerOption) RegisterOptions() {
 	ServerOpts = s
 }

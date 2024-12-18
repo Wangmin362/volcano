@@ -449,6 +449,7 @@ func (ssn *Session) JobEnqueued(obj interface{}) {
 			if !isEnabled(plugin.EnabledJobEnqueued) {
 				continue
 			}
+			// 执行插件注册的函数
 			fn, found := ssn.jobEnqueuedFns[plugin.Name]
 			if !found {
 				continue

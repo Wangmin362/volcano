@@ -43,6 +43,7 @@ import (
 
 // Session information for the current session
 type Session struct {
+	// 每次调度时,会开启一个Session, 这个UID其实就是一个UUID,每次都会新生成一个
 	UID types.UID
 
 	kubeClient      kubernetes.Interface
@@ -57,7 +58,7 @@ type Session struct {
 	// This should not be mutated after initiated
 	podGroupStatus map[api.JobID]scheduling.PodGroupStatus
 
-	// TODO 这里的Job信息是怎么收集的？
+	// TODO 这里的Job信息是怎么收集的？ 如何理解这里的Job信息？ 这里的Job都是还没有完成调度的Job么？ 什么时候Job信息会被删除？
 	Jobs           map[api.JobID]*api.JobInfo
 	Nodes          map[string]*api.NodeInfo
 	CSINodesStatus map[string]*api.CSINodeStatusInfo
@@ -74,8 +75,10 @@ type Session struct {
 	Configurations []conf.Configuration // Action 的配置文件
 	NodeList       []*api.NodeInfo
 
-	plugins           map[string]Plugin
-	eventHandlers     []*EventHandler
+	plugins       map[string]Plugin
+	eventHandlers []*EventHandler
+
+	// TODO 1. volcano plugin的目的是注册下面各种功能的函数,从而影响volcano的调度
 	jobOrderFns       map[string]api.CompareFn
 	queueOrderFns     map[string]api.CompareFn
 	taskOrderFns      map[string]api.CompareFn
@@ -98,11 +101,12 @@ type Session struct {
 	jobPipelinedFns   map[string]api.VoteFn
 	jobValidFns       map[string]api.ValidateExFn
 	jobEnqueueableFns map[string]api.VoteFn
-	jobEnqueuedFns    map[string]api.JobEnqueuedFn
-	targetJobFns      map[string]api.TargetJobFn
-	reservedNodesFns  map[string]api.ReservedNodesFn
-	victimTasksFns    map[string][]api.VictimTasksFn
-	jobStarvingFns    map[string]api.ValidateFn
+	// TODO 有啥作用？
+	jobEnqueuedFns   map[string]api.JobEnqueuedFn
+	targetJobFns     map[string]api.TargetJobFn
+	reservedNodesFns map[string]api.ReservedNodesFn
+	victimTasksFns   map[string][]api.VictimTasksFn
+	jobStarvingFns   map[string]api.ValidateFn
 }
 
 func openSession(cache cache.Cache) *Session {
