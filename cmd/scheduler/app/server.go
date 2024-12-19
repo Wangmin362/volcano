@@ -116,7 +116,11 @@ func Run(opt *options.ServerOption) error {
 	// 优雅退出，注册SIGINT, SIGTERM信号
 	ctx := signals.SetupSignalContext()
 	run := func(ctx context.Context) {
-		// Scheduler开始运行
+		// 1. 加载Scheduler默认配置文件，Scheduler默认配置文件启用了部分Action,以及Plugin类型的插件
+		// 2. 监听Scheduler配置文件，如果发生变化了，Scheduler需要热加载这个配置文件
+		// 3. 启动Cache, 内部会启动各种Informer用于从APIServer同步Cache关心的各种信息
+		// 4. 等待Cache同步资源完成，其实就是等待Informer同步完成
+		// 5. 每秒执行一次runOnce函数一次，该函数中其实就是打开一个Session,完成一次调度的过程
 		sched.Run(ctx.Done())
 		<-ctx.Done()
 	}
