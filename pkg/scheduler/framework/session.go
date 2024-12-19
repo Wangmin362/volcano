@@ -79,6 +79,7 @@ type Session struct {
 	eventHandlers []*EventHandler
 
 	// TODO 1. volcano plugin的目的是注册下面各种功能的函数,从而影响volcano的调度
+	// TODO 具体分析每个函数的功能
 	jobOrderFns       map[string]api.CompareFn
 	queueOrderFns     map[string]api.CompareFn
 	taskOrderFns      map[string]api.CompareFn
