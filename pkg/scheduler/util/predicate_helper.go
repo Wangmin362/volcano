@@ -14,6 +14,7 @@ import (
 )
 
 type PredicateHelper interface {
+	// PredicateNodes 为当前的Task找到合适数量的节点
 	PredicateNodes(task *api.TaskInfo, nodes []*api.NodeInfo, fn api.PredicateFn, enableErrorCache bool) ([]*api.NodeInfo, *api.FitErrors)
 }
 
@@ -22,6 +23,7 @@ type predicateHelper struct {
 }
 
 // PredicateNodes returns the specified number of nodes that fit a task
+// 为当前的Task找到合适数量的节点
 func (ph *predicateHelper) PredicateNodes(task *api.TaskInfo, nodes []*api.NodeInfo, fn api.PredicateFn, enableErrorCache bool) ([]*api.NodeInfo, *api.FitErrors) {
 	var errorLock sync.RWMutex
 	fe := api.NewFitErrors()
@@ -30,6 +32,7 @@ func (ph *predicateHelper) PredicateNodes(task *api.TaskInfo, nodes []*api.NodeI
 	if allNodes == 0 {
 		return make([]*api.NodeInfo, 0), fe
 	}
+	// 这里目的是尽可能早的提前返回,而不是需要把所有的节点都筛选一遍,只需要筛选一定量的节点即可返回
 	numNodesToFind := CalculateNumOfFeasibleNodesToFind(int32(allNodes))
 
 	//allocate enough space to avoid growing it
@@ -71,6 +74,7 @@ func (ph *predicateHelper) PredicateNodes(task *api.TaskInfo, nodes []*api.NodeI
 		}
 
 		// TODO (k82cn): Enable eCache for performance improvement.
+		// Q: 这里为啥不需要接受返回值判断一下到底当前节点是否合适   A: 因为外层的函数会转换返回值,只有当Succeed状态才不会返回error
 		if _, err := fn(task, node); err != nil {
 			klog.V(3).Infof("Predicates failed: %v", err)
 			errorLock.Lock()
@@ -82,7 +86,9 @@ func (ph *predicateHelper) PredicateNodes(task *api.TaskInfo, nodes []*api.NodeI
 		}
 
 		//check if the number of found nodes is more than the numNodesTofind
+		// 又找到了一个合适部署当前Task的节点
 		length := atomic.AddInt32(&numFoundNodes, 1)
+		// 如果已经找到了合适数量的节点,直接停止查找
 		if length > numNodesToFind {
 			cancel()
 			atomic.AddInt32(&numFoundNodes, -1)

@@ -135,6 +135,7 @@ type SchedulerCache struct {
 
 	Recorder record.EventRecorder
 
+	// 一个Job本质上就是一个PodGroup
 	Jobs                 map[schedulingapi.JobID]*schedulingapi.JobInfo
 	Nodes                map[string]*schedulingapi.NodeInfo
 	Queues               map[schedulingapi.QueueID]*schedulingapi.QueueInfo
@@ -541,7 +542,7 @@ func newSchedulerCache(config *rest.Config, schedulerNames []string, defaultQueu
 		panic(fmt.Sprintf("failed init eventClient, with err: %v", err))
 	}
 
-	// create default queue // 如果K8S集群当中不存在默认的Queue资源，就创建一个默认Queue资源
+	// create default queue 如果K8S集群当中不存在默认的Queue资源，就创建一个默认Queue资源
 	newDefaultQueue(vcClient, defaultQueue)
 	klog.Infof("Create init queue named default")
 
@@ -766,6 +767,8 @@ func (sc *SchedulerCache) addEventHandler() {
 	sc.podGroupInformerV1beta1 = vcinformers.Scheduling().V1beta1().PodGroups()
 	sc.podGroupInformerV1beta1.Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
+			// 1. 校验当前PodGroup是否被当前Scheduler负责,如果不归当前调度器管,直接跳过这个PodGroup
+			// 2. 用户在使用K8S的时候,可能还会部署其他调度工具,譬如coordinator, 有些PodGroup并不属于当前调度器管,所以需要过滤掉
 			FilterFunc: func(obj interface{}) bool {
 				var pg *vcv1beta1.PodGroup
 				switch v := obj.(type) {

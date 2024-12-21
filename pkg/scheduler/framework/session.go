@@ -52,13 +52,14 @@ type Session struct {
 	restConfig      *rest.Config
 	informerFactory informers.SharedInformerFactory
 
-	// TODO 似乎是用来记录集群中的总的容量
+	// 似乎是用来记录集群中的资源总量
 	TotalResource *api.Resource
 	// podGroupStatus cache podgroup status during schedule
 	// This should not be mutated after initiated
 	podGroupStatus map[api.JobID]scheduling.PodGroupStatus
 
 	// TODO 这里的Job信息是怎么收集的？ 如何理解这里的Job信息？ 这里的Job都是还没有完成调度的Job么？ 什么时候Job信息会被删除？
+	// TODO 这里的Job是需要调度的Job么？ 还是volcano全部的Job?
 	Jobs           map[api.JobID]*api.JobInfo
 	Nodes          map[string]*api.NodeInfo
 	CSINodesStatus map[string]*api.CSINodeStatusInfo
@@ -75,7 +76,9 @@ type Session struct {
 	Configurations []conf.Configuration // Action 的配置文件
 	NodeList       []*api.NodeInfo
 
-	plugins       map[string]Plugin
+	plugins map[string]Plugin
+
+	// TODO 这里的事件处理器有啥用? volcano中有哪些事件?
 	eventHandlers []*EventHandler
 
 	// TODO 1. volcano plugin的目的是注册下面各种功能的函数,从而影响volcano的调度
@@ -110,6 +113,10 @@ type Session struct {
 	jobStarvingFns   map[string]api.ValidateFn
 }
 
+// 1. 实例化一个Session，初始化Session的各个字段
+// 2. 从缓存中拷贝Job, Node, Queue等资源副本，volcano将会使用这些资源的副本信息完成资源的调度
+// 3. 遍历当前从缓存中拷贝过来的Job副本，检验每个Job是否合法，剔除掉不满足调度要求的Job, 譬如对于晟腾NPU来说说，不同硬件
+// 型号的NPU的数量申请是有要求，就譬如注解，标签设置错误等等
 func openSession(cache cache.Cache) *Session {
 	ssn := &Session{
 		UID:             uuid.NewUUID(),
@@ -128,6 +135,8 @@ func openSession(cache cache.Cache) *Session {
 		RevocableNodes: map[string]*api.NodeInfo{},
 		Queues:         map[api.QueueID]*api.QueueInfo{},
 
+		// 1. 由于volcano的配置文件是支持动态加载的，因此用户可能会修改volcano的配置，因此不同时间点用户配置的action, plugin可能不一样
+		// 因此这里需要重新加载用户配置的action, plugin
 		plugins:           map[string]Plugin{},
 		jobOrderFns:       map[string]api.CompareFn{},
 		queueOrderFns:     map[string]api.CompareFn{},
@@ -156,14 +165,16 @@ func openSession(cache cache.Cache) *Session {
 		jobStarvingFns:    map[string]api.ValidateFn{},
 	}
 
+	// 拷贝当前缓存
 	snapshot := cache.Snapshot()
-
 	ssn.Jobs = snapshot.Jobs
+
 	for _, job := range ssn.Jobs {
 		if job.PodGroup != nil {
 			ssn.podGroupStatus[job.UID] = *job.PodGroup.Status.DeepCopy()
 		}
 
+		// 1. 校验当前Job是否合法，是否有资格被调度。譬如此Job的某些字段、注解、标签错误，可能导致后续调度异常，此时就需要剔除掉这个Job
 		if vjr := ssn.JobValid(job); vjr != nil {
 			if !vjr.Pass {
 				jc := &scheduling.PodGroupCondition{
@@ -175,11 +186,14 @@ func openSession(cache cache.Cache) *Session {
 					Message:            vjr.Message,
 				}
 
+				// 1. 更新这个Job的Condition,告诉用户为什么这个Job不能被重新调度
+				// 2. TODO PodGroup的状态被修改之后, 是谁发现了这个状态的修改,并更新到了APIServer中?
 				if err := ssn.UpdatePodGroupCondition(job, jc); err != nil {
 					klog.Errorf("Failed to update job condition: %v", err)
 				}
 			}
 
+			// 删除这个不能被调度的Job
 			delete(ssn.Jobs, job.UID)
 		}
 	}

@@ -101,6 +101,7 @@ func (info *TopologyInfo) Clone() *TopologyInfo {
 }
 
 // TaskInfo will have all infos about the task
+// 代表一个Task, 本质上就是一个Pod
 type TaskInfo struct {
 	UID TaskID
 	Job JobID
@@ -295,6 +296,9 @@ type tasksMap map[TaskID]*TaskInfo
 type NodeResourceMap map[string]*Resource
 
 // JobInfo will have all info of a Job
+// 1. 这里的Job本质上就是一个PodGroup，一个PodGroup里面可以有多个Task，一个Task对应一个Pod
+// 2. 在volcano中调度的基本单位就是PodGroup，最小调度单元其实就是Task，也就是一个Pod
+// 3. 因此这里一个Job本质上就是一个PodGroup
 type JobInfo struct {
 	UID   JobID
 	PgUID types.UID
@@ -314,7 +318,9 @@ type JobInfo struct {
 	NodesFitErrors map[TaskID]*FitErrors
 
 	// All tasks of the Job.
-	TaskStatusIndex       map[TaskStatus]tasksMap
+	TaskStatusIndex map[TaskStatus]tasksMap
+
+	// 当前Job所关联的所有Task
 	Tasks                 tasksMap
 	TaskMinAvailable      map[TaskID]int32
 	TaskMinAvailableTotal int32
@@ -861,6 +867,7 @@ func (ji *JobInfo) IsStarving() bool {
 }
 
 // IsPending returns whether job is in pending status
+// Job是否Pending,其实判断的是PodGroup的状态是否Pending
 func (ji *JobInfo) IsPending() bool {
 	return ji.PodGroup == nil ||
 		ji.PodGroup.Status.Phase == scheduling.PodGroupPending ||

@@ -34,7 +34,8 @@ type Cache interface {
 	Run(stopCh <-chan struct{})
 
 	// Snapshot deep copy overall cache information into snapshot
-	// 1、TODO 什么场景下需要做快照？
+	// 1、volcano在一个Session中执行对于所有当前监听到的Job的调度，那么问题来了，在volcano调度的过程中还可能会监听到新的Job, 可能会
+	// 引发一些问题。因此volcano在开启一个Session的时候，会把缓存中Job以及其相关的信息拷贝一份，然后在这个拷贝的信息上进行调度
 	Snapshot() *api.ClusterInfo
 
 	// WaitForCacheSync waits for all cache synced

@@ -28,6 +28,10 @@ import (
 
 // OpenSession start the session
 func OpenSession(cache cache.Cache, tiers []conf.Tier, configurations []conf.Configuration) *Session {
+	// 1. 实例化一个Session，初始化Session的各个字段
+	// 2. 从缓存中拷贝Job, Node, Queue等资源副本，volcano将会使用这些资源的副本信息完成资源的调度
+	// 3. 遍历当前从缓存中拷贝过来的Job副本，检验每个Job是否合法，剔除掉不满足调度要求的Job, 譬如对于晟腾NPU来说说，不同硬件
+	// 型号的NPU的数量申请是有要求，就譬如注解，标签设置错误等等
 	ssn := openSession(cache)
 	ssn.Tiers = tiers
 	ssn.Configurations = configurations

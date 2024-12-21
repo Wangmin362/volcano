@@ -41,12 +41,16 @@ func (enqueue *Action) Name() string {
 
 func (enqueue *Action) Initialize() {}
 
+// Execute
+// 1. 遍历所有的Job, 把Job按照其关联的Queue进行优先级排序,如果Job不处于Pending状态,那么就把这个Job剔除掉，因为只有Pending状态的Job才需要被调度
+// 2.
 func (enqueue *Action) Execute(ssn *framework.Session) {
 	klog.V(5).Infof("Enter Enqueue ...")
 	defer klog.V(5).Infof("Leaving Enqueue ...")
 
 	// 1、queues本质上是一个小端堆，这里可以看出，不同的队列有不同的优先级，这正式Volcano设计Queue意义之所在，Queue本身就是为了抽象
 	// 不同的优先级，本质上就是为了划分集群资源。通过Queue划分集群资源之后，Queue中归属的Job也相当于划分了优先级
+	// 2. 队列优先级排序规则为: 若制定了queueOrder函数, 则按照queueOrder函数的优先级排序, 否则按照创建时间和UID排序
 	queues := util.NewPriorityQueue(ssn.QueueOrderFn)
 	queueSet := sets.NewString()
 
@@ -77,14 +81,15 @@ func (enqueue *Action) Execute(ssn *framework.Session) {
 			queues.Push(queue)
 		}
 
-		// 需要调度的Job就是处于Pending当中的Job，否则处于其它状态的Job肯定已经调度过了
+		// 1. 需要调度的Job就是处于Pending当中的Job，否则处于其它状态的Job肯定已经调度过了
+		// 2. Job是否Pending,其实判断的是PodGroup的状态是否Pending
 		if job.IsPending() {
 			// 初始化优先级队列，这个队列本质上就是一个小端堆，TODO 为什么不设置为一个大端堆
 			if _, found := jobsMap[job.Queue]; !found {
 				jobsMap[job.Queue] = util.NewPriorityQueue(ssn.JobOrderFn)
 			}
 
-			// 把待调度的Job放入到对应队列的
+			// 把待调度的Job放入到对应队列
 			klog.V(5).Infof("Added Job <%s/%s> into Queue <%s>", job.Namespace, job.Name, job.Queue)
 			jobsMap[job.Queue].Push(job)
 		}
@@ -92,6 +97,8 @@ func (enqueue *Action) Execute(ssn *framework.Session) {
 
 	klog.V(3).Infof("Try to enqueue PodGroup to %d Queues", len(jobsMap))
 
+	// 1. 按照队列的优先级,依次取出队列
+	// 2. 遍历队列中的Job,
 	for {
 		// 如果为空，说明当前没有需要调度的Job
 		if queues.Empty() {
@@ -108,10 +115,9 @@ func (enqueue *Action) Execute(ssn *framework.Session) {
 			continue
 		}
 
-		// TODO 为什么这里弹出一个Job
+		// 从队列当中弹出一个Job,判断当前Job是否可以入队
 		job := jobs.Pop().(*api.JobInfo)
 
-		// TODO 如何理解Job入队的判断依据？
 		// 如果Job没有设置最小需要的资源，说明这个Job没有特别的要求，可能很小的资源都可以运行
 		if job.PodGroup.Spec.MinResources == nil || ssn.JobEnqueueable(job) {
 			// TODO 入队一个待调度的Job

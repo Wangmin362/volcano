@@ -78,7 +78,7 @@ func Run(opt *options.ServerOption) error {
 	// 2. 用户可以根据自己的需要Plugin,然后通过go plugin的方式把插件编译为so文件,放置在当前配置的目录当中. volcano启动之后会自动加载
 	// 这个目录下所有so文件, 并判断这个so文件是否是一个合法的volcano插件,目前看来,只要实现了New方法,并且能够强制转换为PluginBuilder就认为是
 	// volcano插件
-	// 3. 对于晟腾的NPU, 目前注册了vo
+	// 3. 对于晟腾的NPU, 目前注册了volcano-npu_v6.0.T600_linux_x86_64
 	if opt.PluginsDir != "" {
 		// 1. 这里纯粹就是使用go plugin的方式动态加载.so文件，这些.so文件其实就是golang的插件
 		// 2. 遍历当前配置的插件目录中所有的so文件,
@@ -101,7 +101,7 @@ func Run(opt *options.ServerOption) error {
 	}
 
 	if opt.EnableMetrics {
-		go func() { // 给普罗米修斯添加指标
+		go func() {
 			http.Handle("/metrics", promHandler())
 			klog.Fatalf("Prometheus Http Server failed %s", http.ListenAndServe(opt.ListenAddress, nil))
 		}()

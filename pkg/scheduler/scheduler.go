@@ -85,7 +85,6 @@ type Scheduler struct {
 	   "useClusterInfoManager":"true","super-pod-size": "48", "reserve-nodes": "2"}
 	*/
 	actions []framework.Action
-	// TODO 如何自定义插件
 	plugins []conf.Tier
 	// Action的配置
 	configurations []conf.Configuration
@@ -148,13 +147,13 @@ func (pc *Scheduler) Run(stopCh <-chan struct{}) {
 
 	// Start cache for policy.
 	pc.cache.SetMetricsConf(pc.metricsConf)
-	// 启动Cache,等待Informer中的数据同步完成 TODO 这里是在干什么?
+	// 启动Cache,等待Informer中的数据同步完成 TODO 分析内部细节
 	pc.cache.Run(stopCh)
 	// 等待K8S资源以及Volcano定义的资源同步完成，当然这里同步的资源肯定不是所有的资源，而是Scheduler关心的资源
+	// TODO 这里尤其是需要注意，若需要Informer同步某些资源，但是忘记给Pod添加RBAC权限，Informer同步资源将会被卡住，这里将会被卡死
 	pc.cache.WaitForCacheSync(stopCh)
 	klog.V(2).Infof("Scheduler completes Initialization and start to run")
 
-	// TODO 核心在这里
 	// 1. schedulePeriod默认为1秒，也就是volcano默认调度器每秒钟执行一次调度
 	go wait.Until(pc.runOnce, pc.schedulePeriod, stopCh)
 
@@ -184,12 +183,12 @@ func (pc *Scheduler) runOnce() {
 
 	// Load ConfigMap to check which action is enabled.
 	conf.EnabledActionMap = make(map[string]bool)
-	// TODO 如果用户一分钟前开启了某个Action, 后面删除了这个Action, 这里是否会有问题
+	// TODO 如果用户一分钟前开启了某个Action, 后面删除了这个Action,此Map中中KV将会一直存在, 这里是否会有问题
 	for _, action := range actions {
 		conf.EnabledActionMap[action.Name()] = true
 	}
 
-	// 开启一个调度Session TODO 如何理解一个Session
+	// 开启一个调度Session,volcano在一个会话中完成对于当前监听到的PodGroup资源的调度
 	ssn := framework.OpenSession(pc.cache, plugins, configurations)
 	defer func() {
 		framework.CloseSession(ssn) // 完成调度

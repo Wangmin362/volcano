@@ -570,6 +570,7 @@ func (ssn *Session) ClusterOrderFn(l, r interface{}) bool {
 }
 
 // QueueOrderFn invoke queueorder function of the plugins
+// 队列优先级排序规则为: 若制定了queueOrder函数, 则按照queueOrder函数的优先级排序, 否则按照创建时间和UID排序
 func (ssn *Session) QueueOrderFn(l, r interface{}) bool {
 	for _, tier := range ssn.Tiers {
 		for _, plugin := range tier.Plugins {

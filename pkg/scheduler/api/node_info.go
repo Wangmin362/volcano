@@ -57,6 +57,7 @@ type NodeInfo struct {
 	// The pipelined resource on that node
 	Pipelined *Resource
 	// The idle resource on that node
+	// TODO 表示空闲资源么？
 	Idle *Resource
 	// The used resource on that node, including running and terminating
 	// pods

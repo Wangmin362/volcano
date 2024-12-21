@@ -27,6 +27,8 @@ type Event struct {
 
 // EventHandler structure
 type EventHandler struct {
-	AllocateFunc   func(event *Event)
+	// TODO 分配资源之后触发的事件?
+	AllocateFunc func(event *Event)
+	// TODO 回收资源之后触发的事件?
 	DeallocateFunc func(event *Event)
 }

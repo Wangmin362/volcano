@@ -74,6 +74,7 @@ func responsibleForNode(nodeName string, mySchedulerPodName string, c *consisten
 }
 
 // responsibleForPodGroup returns true if Job which PodGroup belongs is assigned to current scheduler in multi-schedulers scenario
+// 校验当前PodGroup是否被当前Scheduler负责,如果不归当前调度器管,直接跳过这个PodGroup
 func responsibleForPodGroup(pg *scheduling.PodGroup, mySchedulerPodName string, c *consistent.Consistent) bool {
 	if c != nil {
 		var key string
