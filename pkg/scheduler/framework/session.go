@@ -60,6 +60,8 @@ type Session struct {
 
 	// TODO 这里的Job信息是怎么收集的？ 如何理解这里的Job信息？ 这里的Job都是还没有完成调度的Job么？ 什么时候Job信息会被删除？
 	// TODO 这里的Job是需要调度的Job么？ 还是volcano全部的Job?
+	// 1. 这里的Job本质上就是一个PodGroup, volcano中的一个Job都是以PodGroup的形式管理的，阵阵调度的时候则是以Task的最小粒度进行调度的
+	// 2. 一个Task本质上就是一个Pod, 一个PodGroup中可能包含多个Task
 	Jobs           map[api.JobID]*api.JobInfo
 	Nodes          map[string]*api.NodeInfo
 	CSINodesStatus map[string]*api.CSINodeStatusInfo
