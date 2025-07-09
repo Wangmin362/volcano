@@ -183,6 +183,7 @@ func (dp *deviceSharePlugin) OnSessionOpen(ssn *framework.Session) {
 			nodeScore := float64(score) * float64(dp.scheduleWeight)
 			klog.V(5).Infof("Node: %s, task<%s/%s> Device Score weight %d, score: %f", node.Name, task.Namespace, task.Name, dp.scheduleWeight, nodeScore)
 		}
+		// TODO 这里为什么不返回实际分数呢？ 感觉是个BUG
 		return 0, nil
 	})
 }
