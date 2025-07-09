@@ -35,6 +35,7 @@ import (
 
 // PluginName indicates name of volcano scheduler plugin.
 const (
+	// PluginName 配置volcano插件的时候需要使用的名字
 	PluginName = "deviceshare"
 	// GPUSharingPredicate is the key for enabling GPU Sharing Predicate in YAML
 	GPUSharingPredicate = "deviceshare.GPUSharingEnable"
@@ -53,6 +54,24 @@ type deviceSharePlugin struct {
 	schedulePolicy  string
 	scheduleWeight  int
 }
+
+/*
+  volcano-scheduler.conf: |
+    actions: allocate,reclaim,preempt
+    tiers:
+        - plugins:
+            - name: gang
+            - name: conformance
+            - name: priority
+        - plugins:
+            - name: drf
+              enablePreemptable: true
+            - name: deviceshare  # 启用deviceshare插件
+              arguments:
+                deviceshare.VGPUEnable: true
+            - name: nodeorder
+            - name: predicates
+*/
 
 // New return priority plugin
 func New(arguments framework.Arguments) framework.Plugin {
@@ -79,9 +98,12 @@ func enablePredicate(dsp *deviceSharePlugin) {
 	}
 	args.GetInt(&dsp.scheduleWeight, ScheduleWeight)
 
+	// TODO 为什么不能同时开启？
 	if gpushare.GpuSharingEnable && gpushare.GpuNumberEnable {
 		klog.Fatal("can not define true in both gpu sharing and gpu number")
 	}
+
+	// TODO 为什么不能同时开启？
 	if (gpushare.GpuSharingEnable || gpushare.GpuNumberEnable) && vgpu.VGPUEnable {
 		klog.Fatal("gpu-share and vgpu can't be used together")
 	}
@@ -109,6 +131,7 @@ func getDeviceScore(ctx context.Context, pod *v1.Pod, node *api.NodeInfo, schedu
 
 func (dp *deviceSharePlugin) OnSessionOpen(ssn *framework.Session) {
 	// Register event handlers to update task info in PodLister & nodeMap
+	// 预选函数，判断当前节点是否满足任务的资源需求
 	ssn.AddPredicateFn(dp.Name(), func(task *api.TaskInfo, node *api.NodeInfo) ([]*api.Status, error) {
 		predicateStatus := make([]*api.Status, 0)
 		// Check PredicateWithCache

@@ -75,6 +75,7 @@ type NodeInfo struct {
 	RevocableZone     string
 
 	// Used to store custom information
+	// TODO 这里的信息什么时候被放进去的？ 讲道理应该是有自己的插件在某个时间点简单放进去的
 	Others map[string]interface{}
 	//SharedDevices map[string]SharedDevicePool
 

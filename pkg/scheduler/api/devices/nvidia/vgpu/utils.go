@@ -88,7 +88,17 @@ func patchNodeAnnotations(node *v1.Node, annotations map[string]string) error {
 	return err
 }
 
+/*
+	str类型
+
+volcano.sh/node-vgpu-register: 'GPU-151ae9c0-83a9-2dd1-8981-b5f44c021a58,1,1126,NVIDIA-NVIDIA
+
+	GeForce GTX 1080 Ti,true:GPU-76f93f2b-8cd8-4dd0-e555-56418bde1457,1,1126,NVIDIA-NVIDIA
+	GeForce GTX 1080 Ti,true:'
+*/
+// 解析hami nvidia-volcano-device-plugin上报上来的信息
 func decodeNodeDevices(name string, str string) *GPUDevices {
+	// 每个分号就是一个设备的信息描述
 	if !strings.Contains(str, ":") {
 		return nil
 	}
@@ -118,6 +128,7 @@ func decodeNodeDevices(name string, str string) *GPUDevices {
 	return retval
 }
 
+// 当Pod分配好设备之后，会被写入到Pod注解当中，譬如： volcano.sh/vgpu-ids-new: 'GPU-76f93f2b-8cd8-4dd0-e555-56418bde1457,NVIDIA,1126,0:
 func encodeContainerDevices(cd []ContainerDevice) string {
 	tmp := ""
 	for _, val := range cd {
@@ -128,6 +139,8 @@ func encodeContainerDevices(cd []ContainerDevice) string {
 	//return strings.Join(cd, ",")
 }
 
+// 一个Pod存在多个容器的情况下，假如多个容器申请了设备，就需要使用这里的方法进行编码，譬如：
+// volcano.sh/vgpu-ids-new: 'GPU-76f93f2b-8cd8-4dd0-e555-56418bde1457,NVIDIA,1126,0:;vgpu-ids-new: 'GPU-76f93f2b-8cd8-4dd0-e555-56418bde1457,NVIDIA,1126,0:
 func encodePodDevices(pd []ContainerDevices) string {
 	var ss []string
 	for _, cd := range pd {
@@ -136,6 +149,7 @@ func encodePodDevices(pd []ContainerDevices) string {
 	return strings.Join(ss, ";")
 }
 
+// Pod上的注解格式为： vgpu-ids-new: 'GPU-76f93f2b-8cd8-4dd0-e555-56418bde1457,NVIDIA,1126,0:
 func decodeContainerDevices(str string) ContainerDevices {
 	if len(str) == 0 {
 		return ContainerDevices{}
@@ -176,6 +190,7 @@ func decodePodDevices(str string) []ContainerDevices {
 	return pd
 }
 
+// 只要Pod申请volcano.sh/vgpu-memory或者volcano.sh/vgpu-number，就认为Pod申请了VGPU资源
 func checkVGPUResourcesInPod(pod *v1.Pod) bool {
 	for _, container := range pod.Spec.Containers {
 		_, ok := container.Resources.Limits[VolcanoVGPUMemory]
@@ -190,6 +205,7 @@ func checkVGPUResourcesInPod(pod *v1.Pod) bool {
 	return false
 }
 
+// 从Pod上解析容器申请的资源
 func resourcereqs(pod *v1.Pod) []ContainerDeviceRequest {
 	resourceName := v1.ResourceName(VolcanoVGPUNumber)
 	resourceMem := v1.ResourceName(VolcanoVGPUMemory)
@@ -201,6 +217,7 @@ func resourcereqs(pod *v1.Pod) []ContainerDeviceRequest {
 		singledevice := false
 		v, ok := pod.Spec.Containers[i].Resources.Limits[resourceName]
 		if !ok {
+			// TODO 意思是使用volcano.sh/vgpu-memory资源的情况下，一个容器只能挂一张卡么？
 			v, ok = pod.Spec.Containers[i].Resources.Limits[resourceMem]
 			singledevice = true
 		}
@@ -278,6 +295,7 @@ func checkGPUtype(annos map[string]string, cardtype string) bool {
 	if ok {
 		if !strings.Contains(nouse, ",") {
 			if strings.Contains(strings.ToUpper(cardtype), strings.ToUpper(nouse)) {
+				// TODO 这是不是错了，因该是false
 				return true
 			}
 		} else {
@@ -292,6 +310,8 @@ func checkGPUtype(annos map[string]string, cardtype string) bool {
 	return true
 }
 
+// d表示当前节点上的GPU设备信息，n表示Pod上容器的资源申请信息, annos表示Pod上的注解信息
+// 判断当前容器申请的卡的类型和节点上卡的类型是否相等，并且看看用户是否配置了需要使用的卡的类型以及禁用的卡的类型
 func checkType(annos map[string]string, d GPUDevice, n ContainerDeviceRequest) bool {
 	//General type check, NVIDIA->NVIDIA MLU->MLU
 	if !strings.Contains(d.Type, n.Type) {
@@ -333,50 +353,68 @@ func getGPUDeviceSnapShot(snap *GPUDevices) *GPUDevices {
 func checkNodeGPUSharingPredicateAndScore(pod *v1.Pod, gssnap *GPUDevices, replicate bool, schedulePolicy string) (bool, []ContainerDevices, float64, error) {
 	// no gpu sharing request
 	score := float64(0)
+	// 只要Pod申请volcano.sh/vgpu-memory或者volcano.sh/vgpu-number，就认为Pod申请了VGPU资源
 	if !checkVGPUResourcesInPod(pod) {
+		// 如果Pod没有申请相关的资源，那么就认为这个Pod是否当前Pod调度，因为本身这里只是为了负责调度vgpu
 		return true, []ContainerDevices{}, 0, nil
 	}
+	// 从Pod上解析容器申请的资源
 	ctrReq := resourcereqs(pod)
 	if len(ctrReq) == 0 {
+		// 如果Pod没有申请相关的资源，那么就认为这个Pod是否当前Pod调度，因为本身这里只是为了负责调度vgpu
 		return true, []ContainerDevices{}, 0, nil
 	}
 	var gs *GPUDevices
 	if replicate {
+		// Q: 这里复制的意义在哪里？ 为了解决什么问题？
+		// A: 后续代码可知，再给容器分配卡的时候只能一个一个看，看的过程中如果当前卡满足容器需求，就需要更新信息。但是最终如果如果不能分配
+		// 容器所有申请的卡，显然之前假设分配的卡就需要还原，因此这里需要拷贝一份节点卡的信息。后续如果分配失败，不会影响原始节点信息
 		gs = getGPUDeviceSnapShot(gssnap)
 	} else {
 		gs = gssnap
 	}
 	ctrdevs := []ContainerDevices{}
 	for _, val := range ctrReq {
+		// 判断当前节点是否满足每一个设备的需求
 		devs := []ContainerDevice{}
+
+		// 如果需要申请的设备的数量大于当前节点总共的数量，那当前节点肯定是无法满足调度的
 		if int(val.Nums) > len(gs.Device) {
 			return false, []ContainerDevices{}, 0, fmt.Errorf("no enough gpu cards on node %s", gs.Name)
 		}
 		klog.V(3).InfoS("Allocating device for container", "request", val)
 
+		// 从当前节点上的设备倒叙分配
 		for i := len(gs.Device) - 1; i >= 0; i-- {
 			klog.V(3).InfoS("Scoring pod request", "memReq", val.Memreq, "memPercentageReq", val.MemPercentagereq, "coresReq", val.Coresreq, "Nums", val.Nums, "Index", i, "ID", gs.Device[i].ID)
 			klog.V(3).InfoS("Current Device", "Index", i, "TotalMemory", gs.Device[i].Memory, "UsedMemory", gs.Device[i].UsedMem, "UsedCores", gs.Device[i].UsedNum)
+			// 如果当前GPU能够被同时使用的数量已经超了，那么当前卡不能分配，因为已经超了
 			if gs.Device[i].Number <= uint(gs.Device[i].UsedNum) {
 				continue
 			}
+			// TODO 为啥是101这么一个奇怪的数字？
 			if val.MemPercentagereq != 101 && val.Memreq == 0 {
 				val.Memreq = int32(gs.Device[i].Memory * uint(val.MemPercentagereq/100))
 			}
+			// 当前卡的显存不够，也无法分配
 			if gs.Device[i].Memory-gs.Device[i].UsedMem < uint(val.Memreq) {
 				continue
 			}
+			// 当前卡的算力不够无法分配
 			if 100-gs.Device[i].UsedCore < uint(val.Coresreq) {
 				continue
 			}
 			// Coresreq=100 indicates it want this card exclusively
+			// 如果当前容器想要独占一张卡，但是这张卡又被其它容器使用了，那么当前容器也无法分配这张卡
 			if val.Coresreq == 100 && gs.Device[i].UsedNum > 0 {
 				continue
 			}
 			// You can't allocate core=0 job to an already full GPU
+			// 如果容器没有设置算力的需求，但是这张卡算力已经被用完了，此时也无法分配
 			if gs.Device[i].UsedCore == 100 && val.Coresreq == 0 {
 				continue
 			}
+			// 判断当前容器申请的卡的类型和节点上卡的类型是否相等，并且看看用户是否配置了需要使用的卡的类型以及禁用的卡的类型
 			if !checkType(pod.Annotations, *gs.Device[i], val) {
 				klog.Errorln("failed checktype", gs.Device[i].Type, val.Type)
 				continue
@@ -385,10 +423,12 @@ func checkNodeGPUSharingPredicateAndScore(pod *v1.Pod, gssnap *GPUDevices, repli
 			//free += node.Devices[i].Count - node.Devices[i].Used
 			if val.Nums > 0 {
 				klog.V(3).InfoS("device fitted", "ID", gs.Device[i].ID)
+				// 假设分配这张卡，因此需要更新使用信息
 				val.Nums--
 				gs.Device[i].UsedNum++
 				gs.Device[i].UsedMem += uint(val.Memreq)
 				gs.Device[i].UsedCore += uint(val.Coresreq)
+				// 记录分配的设备
 				devs = append(devs, ContainerDevice{
 					UUID:      gs.Device[i].UUID,
 					Type:      val.Type,
@@ -410,6 +450,7 @@ func checkNodeGPUSharingPredicateAndScore(pod *v1.Pod, gssnap *GPUDevices, repli
 				break
 			}
 		}
+		// 如果容器申请的设备到最后都还没有全部分配到，那就认为当前节点无法满足调度，因为GPU的数量不够
 		if val.Nums > 0 {
 			return false, []ContainerDevices{}, 0, fmt.Errorf("not enough gpu fitted on this node")
 		}

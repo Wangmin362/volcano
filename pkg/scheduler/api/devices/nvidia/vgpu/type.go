@@ -20,7 +20,9 @@ var VGPUEnable bool
 var NodeLockEnable bool
 
 const (
-	GPUInUse                         = "nvidia.com/use-gputype"
+	// Pod上通过这个注解指定想要使用GPU的类型，调度器只会从指定类型的GPU卡中分配
+	GPUInUse = "nvidia.com/use-gputype"
+	// Pod通过指定这个注解指定不想使用的GPU类型
 	GPUNoUse                         = "nvidia.com/nouse-gputype"
 	AssignedTimeAnnotations          = "volcano.sh/vgpu-time"
 	AssignedIDsAnnotations           = "volcano.sh/vgpu-ids-new"

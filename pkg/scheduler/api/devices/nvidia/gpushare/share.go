@@ -91,6 +91,7 @@ func getUnhealthyGPUs(gs *GPUDevices, node *v1.Node) (unhealthyGPUs []int) {
 }
 
 // GetGPUIndex returns the index list of gpu cards
+// 获取当前Pod分配的GPU索引
 func GetGPUIndex(pod *v1.Pod) []int {
 	if len(pod.Annotations) == 0 {
 		return nil
@@ -146,6 +147,7 @@ func checkNodeGPUNumberPredicate(pod *v1.Pod, gs *GPUDevices) (bool, error) {
 
 // predicateGPUbyMemory returns the available GPU ID
 func predicateGPUbyMemory(pod *v1.Pod, gs *GPUDevices) []int {
+	// 统计Pod所有容器所需要的GPU显存
 	gpuRequest := getGPUMemoryOfPod(pod)
 	allocatableGPUs := getDevicesIdleGPUMemory(gs)
 
@@ -215,6 +217,7 @@ func (g *GPUDevice) isIdleGPU() bool {
 }
 
 // getGPUMemoryPod returns the GPU memory required by the pod.
+// 统计Pod所有容器所需要的GPU显存
 func getGPUMemoryOfPod(pod *v1.Pod) uint {
 	var initMem uint
 	for _, container := range pod.Spec.InitContainers {

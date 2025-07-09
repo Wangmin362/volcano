@@ -40,9 +40,12 @@ type GPUDevice struct {
 	// The pods that are sharing this GPU
 	PodMap map[string]*v1.Pod
 	// memory per card
+	// 当前设备的显存
 	Memory uint
 	// max sharing number
+	// TODO 这个数字是谁控制的？ hami volcano-nvidia-device-plugin插件上报的么？
 	Number uint
+	// TODO 之所以这里没有记录一张卡的总算力，其实是因为一张的卡算力就是100%
 	// type of this number
 	Type string
 	// Health condition of this GPU
@@ -80,14 +83,23 @@ func NewGPUDevices(name string, node *v1.Node) *GPUDevices {
 	if node == nil {
 		return nil
 	}
+
+	/*
+		volcano.sh/node-vgpu-register: 'GPU-151ae9c0-83a9-2dd1-8981-b5f44c021a58,1,1126,NVIDIA-NVIDIA
+		      GeForce GTX 1080 Ti,true:GPU-76f93f2b-8cd8-4dd0-e555-56418bde1457,1,1126,NVIDIA-NVIDIA
+		      GeForce GTX 1080 Ti,true:'
+	*/
 	annos, ok := node.Annotations[VolcanoVGPURegister]
 	if !ok {
 		return nil
 	}
+
+	// volcano.sh/node-vgpu-handshake: Requesting_2025.07.09 16:12:30
 	handshake, ok := node.Annotations[VolcanoVGPUHandshake]
 	if !ok {
 		return nil
 	}
+	// 解析hami nvidia-volcano-device-plugin上报上来的信息， 也就是节点设备信息
 	nodedevices := decodeNodeDevices(name, annos)
 	if len(nodedevices.Device) == 0 {
 		return nil
@@ -99,6 +111,7 @@ func NewGPUDevices(name string, node *v1.Node) *GPUDevices {
 	// We have to handshake here in order to avoid time-inconsistency between scheduler and nodes
 	if strings.Contains(handshake, "Requesting") {
 		formertime, _ := time.Parse("2006.01.02 15:04:05", strings.Split(handshake, "_")[1])
+		// 如果为true，说明volcano-nvidia-device-plugin可能已经有一分钟以上没有上报信息了，需要重新上报信息
 		if time.Now().After(formertime.Add(time.Second * 60)) {
 			klog.Infof("node %v device %s leave", node.Name, handshake)
 
@@ -131,10 +144,12 @@ func (gs *GPUDevices) GetIgnoredDevices() []string {
 
 // AddResource adds the pod to GPU pool if it is assigned
 func (gs *GPUDevices) AddResource(pod *v1.Pod) {
+	// 如果Pod分配了GPU设备，就会被打上这个注解
 	ids, ok := pod.Annotations[AssignedIDsAnnotations]
 	if !ok {
 		return
 	}
+	// 解析当前Pod所有容器分配的GPU的卡信息
 	podDev := decodePodDevices(ids)
 	for _, val := range podDev {
 		for _, deviceused := range val {
@@ -179,6 +194,7 @@ func (gs *GPUDevices) SubResource(pod *v1.Pod) {
 }
 
 func (gs *GPUDevices) HasDeviceRequest(pod *v1.Pod) bool {
+	// 只要Pod申请volcano.sh/vgpu-memory或者volcano.sh/vgpu-number，就认为Pod申请了VGPU资源
 	if VGPUEnable && checkVGPUResourcesInPod(pod) {
 		return true
 	}
@@ -193,6 +209,7 @@ func (gs *GPUDevices) Release(kubeClient kubernetes.Interface, pod *v1.Pod) erro
 func (gs *GPUDevices) FilterNode(pod *v1.Pod, schedulePolicy string) (int, string, error) {
 	if VGPUEnable {
 		klog.V(4).Infoln("hami-vgpu DeviceSharing starts filtering pods", pod.Name)
+		// 判断当前节点是否能够满足容器申请的所有资源
 		fit, _, score, err := checkNodeGPUSharingPredicateAndScore(pod, gs, true, schedulePolicy)
 		if err != nil || !fit {
 			klog.Errorln("deviceSharing err=", err.Error())
@@ -214,6 +231,7 @@ func (gs *GPUDevices) Allocate(kubeClient kubernetes.Interface, pod *v1.Pod) err
 		}
 		if NodeLockEnable {
 			nodelock.UseClient(kubeClient)
+			// 添加节点锁，volcano-nvidia-device-plugin需要在Allocate的时候解锁
 			err = nodelock.LockNode(gs.Name, DeviceName)
 			if err != nil {
 				return errors.Errorf("node %s locked for lockname gpushare %s", gs.Name, err.Error())
@@ -232,6 +250,7 @@ func (gs *GPUDevices) Allocate(kubeClient kubernetes.Interface, pod *v1.Pod) err
 		if err != nil {
 			return err
 		}
+		// 更新指标
 		gs.GetStatus()
 		klog.V(3).Infoln("DeviceSharing:Allocate Success")
 	}

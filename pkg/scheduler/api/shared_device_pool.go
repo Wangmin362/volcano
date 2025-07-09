@@ -31,10 +31,12 @@ const (
 )
 
 type Devices interface {
-	//following two functions used in node_info
+	// AddResource following two functions used in node_info
 	//AddResource is to add the corresponding device resource of this 'pod' into current scheduler cache
+	// 用于更新当前Pod使用的设备到调度缓存中，记录每个GPU卡的使用情况
 	AddResource(pod *v1.Pod)
 	//SubResource is to subtract the corresponding device resource of this 'pod' from current scheduler cache
+	// 用于释放当前Pod使用卡的情况
 	SubResource(pod *v1.Pod)
 
 	//following four functions used in predicate

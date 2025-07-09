@@ -56,10 +56,12 @@ func NewGPUDevice(id int, mem uint) *GPUDevice {
 	}
 }
 
+// NewGPUDevices 解析当前节点的卡
 func NewGPUDevices(name string, node *v1.Node) *GPUDevices {
 	if node == nil {
 		return nil
 	}
+	// TODO 这个资源是谁上报的？
 	memory, ok := node.Status.Capacity[VolcanoGPUResource]
 	if !ok {
 		return nil
@@ -98,8 +100,10 @@ func (gs *GPUDevices) GetIgnoredDevices() []string {
 
 // AddResource adds the pod to GPU pool if it is assigned
 func (gs *GPUDevices) AddResource(pod *v1.Pod) {
+	// 统计Pod所有容器所需要的GPU显存
 	gpuRes := getGPUMemoryOfPod(pod)
 	if gpuRes > 0 {
+		// 获取当前Pod分配的GPU索引
 		ids := GetGPUIndex(pod)
 		for _, id := range ids {
 			if dev := gs.Device[id]; dev != nil {
