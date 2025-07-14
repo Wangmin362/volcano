@@ -67,6 +67,7 @@ type NodeInfo struct {
 	Capacity      *Resource
 	ResourceUsage *NodeUsage
 
+	// 用于记录当前Pod上已经调度的Task，也就是Pod
 	Tasks       map[TaskID]*TaskInfo
 	NumaInfo    *NumatopoInfo
 	NumaChgFlag NumaChgFlag
@@ -76,6 +77,8 @@ type NodeInfo struct {
 
 	// Used to store custom information
 	// TODO 这里的信息什么时候被放进去的？ 讲道理应该是有自己的插件在某个时间点简单放进去的
+	// 1. 这里的信息是后续插件在调度的时候需要使用的一些信息，因此当volcano缓存这个节点信息的时候，就需要把后续插件感兴趣的信息缓存起来，
+	// 方便后续执行插件的时候从里面取数据
 	Others map[string]interface{}
 	//SharedDevices map[string]SharedDevicePool
 
@@ -161,6 +164,7 @@ func NewNodeInfo(node *v1.Node) *NodeInfo {
 		nodeInfo.Allocatable = NewResource(node.Status.Allocatable).Add(nodeInfo.OversubscriptionResource)
 		nodeInfo.Capacity = NewResource(node.Status.Capacity).Add(nodeInfo.OversubscriptionResource)
 	}
+	// 通过节点注解，解析节点上的设备信息，缓存起来，后续插件在执行各个回调方法的时候，需要用到这些信息
 	nodeInfo.setNodeOthersResource(node)
 	nodeInfo.setNodeState(node)
 	nodeInfo.setRevocableZone(node)
@@ -404,6 +408,7 @@ func (ni *NodeInfo) allocateIdleResource(ti *TaskInfo) {
 // AddTask is used to add a task in nodeInfo object
 //
 // If error occurs both task and node are guaranteed to be in the original state.
+// TODO 把一个任务加入到一个节点上，我估计这个方法的调用一定是调度完成了，这个Task已经被分配到了这个Node节点上，所以需要假如到节点中
 func (ni *NodeInfo) AddTask(task *TaskInfo) error {
 	if len(task.NodeName) > 0 && len(ni.Name) > 0 && task.NodeName != ni.Name {
 		return fmt.Errorf("task <%v/%v> already on different node <%v>",
@@ -426,6 +431,7 @@ func (ni *NodeInfo) AddTask(task *TaskInfo) error {
 			ni.allocateIdleResource(ti)
 			ni.Releasing.Add(ti.Resreq)
 			ni.Used.Add(ti.Resreq)
+			// TODO 为什么一个Pod都被删除了还需要增加资源？ 这里的逻辑是不是有问题
 			ni.addResource(ti.Pod)
 		case Pipelined:
 			ni.Pipelined.Add(ti.Resreq)

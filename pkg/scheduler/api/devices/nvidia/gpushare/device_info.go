@@ -57,6 +57,7 @@ func NewGPUDevice(id int, mem uint) *GPUDevice {
 }
 
 // NewGPUDevices 解析当前节点的卡
+// TODO GPUShare是哪个DP上报的？ 目前看来不是HAMI DP上报，难道是适配其它第三方的DP？
 func NewGPUDevices(name string, node *v1.Node) *GPUDevices {
 	if node == nil {
 		return nil

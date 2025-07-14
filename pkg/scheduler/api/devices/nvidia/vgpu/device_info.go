@@ -32,6 +32,7 @@ import (
 )
 
 // GPUDevice include gpu id, memory and the pods that are sharing it.
+// 1. 之所以这里没有记录一张卡的总算力，其实是因为一张的卡算力就是100%，不需要额外的字段记录
 type GPUDevice struct {
 	// GPU ID
 	ID int
@@ -43,9 +44,8 @@ type GPUDevice struct {
 	// 当前设备的显存
 	Memory uint
 	// max sharing number
-	// TODO 这个数字是谁控制的？ hami volcano-nvidia-device-plugin插件上报的么？
+	// Q: 这个数字是谁控制的？ A: hami volcano-nvidia-device-plugin插件上报的,通过注解上报上来
 	Number uint
-	// TODO 之所以这里没有记录一张卡的总算力，其实是因为一张的卡算力就是100%
 	// type of this number
 	Type string
 	// Health condition of this GPU
@@ -64,6 +64,7 @@ type GPUDevices struct {
 	// We cache score in filter step according to schedulePolicy, to avoid recalculating in score
 	Score float64
 
+	// key为设备索引，value为GPU设备
 	Device map[int]*GPUDevice
 }
 
@@ -79,6 +80,7 @@ func NewGPUDevice(id int, mem uint) *GPUDevice {
 	}
 }
 
+// 构建节点元信息的时候会调用到这个函数
 func NewGPUDevices(name string, node *v1.Node) *GPUDevices {
 	if node == nil {
 		return nil
@@ -138,6 +140,7 @@ func (gs *GPUDevices) ScoreNode(pod *v1.Pod, schedulePolicy string) float64 {
 	return gs.Score
 }
 
+// TODO 为什么要忽略 volcano.sh/vgpu-memory, volcano.sh/vgpu-memory-percentage, volcano.sh/vgpu-cores这三种资源？
 func (gs *GPUDevices) GetIgnoredDevices() []string {
 	return []string{VolcanoVGPUMemory, VolcanoVGPUMemoryPercentage, VolcanoVGPUCores}
 }
@@ -157,6 +160,8 @@ func (gs *GPUDevices) AddResource(pod *v1.Pod) {
 				break
 			}
 			for index, gsdevice := range gs.Device {
+				// 1. 找到Pod当前分配的芯片，由于当前芯片被分给了这个容器，因此需要记录一下
+				// 2. 其实就是记录当前芯片的使用情况，方便后续调度其它Pod的时候判断一个芯片的资源是否还够使用
 				if gsdevice.UUID == deviceused.UUID {
 					klog.V(4).Infoln("VGPU recording pod", pod.Name, "device", deviceused)
 					gs.Device[index].UsedMem += uint(deviceused.Usedmem)
@@ -193,6 +198,7 @@ func (gs *GPUDevices) SubResource(pod *v1.Pod) {
 	}
 }
 
+// 判断当前Pod是否申请了当前设备，可以通过Pod spec.resource来确定
 func (gs *GPUDevices) HasDeviceRequest(pod *v1.Pod) bool {
 	// 只要Pod申请volcano.sh/vgpu-memory或者volcano.sh/vgpu-number，就认为Pod申请了VGPU资源
 	if VGPUEnable && checkVGPUResourcesInPod(pod) {
