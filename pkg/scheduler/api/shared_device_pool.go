@@ -22,6 +22,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"volcano.sh/volcano/pkg/scheduler/api/devices/ascend"
 	"volcano.sh/volcano/pkg/scheduler/api/devices/nvidia/gpushare"
 	"volcano.sh/volcano/pkg/scheduler/api/devices/nvidia/vgpu"
 )
@@ -29,9 +30,9 @@ import (
 type Devices interface {
 	//following two functions used in node_info
 	//AddResource is to add the corresponding device resource of this 'pod' into current scheduler cache
-	AddResource(pod *v1.Pod)
+	AddResource(pod *v1.Pod) map[string]float64
 	//SubResource is to subtract the corresponding device resource of this 'pod' from current scheduler cache
-	SubResource(pod *v1.Pod)
+	SubResource(pod *v1.Pod) map[string]float64
 
 	//following four functions used in predicate
 	//HasDeviceRequest checks if the 'pod' request this device
@@ -75,10 +76,12 @@ type Devices interface {
 // make sure GPUDevices implements Devices interface
 var _ Devices = new(gpushare.GPUDevices)
 var _ Devices = new(vgpu.GPUDevices)
+var _ Devices = new(ascend.Devices)
 
 var RegisteredDevices = []string{
 	gpushare.DeviceName,
 	vgpu.DeviceName,
+	ascend.DeviceName,
 }
 
 var IgnoredDevicesList = ignoredDevicesList{}

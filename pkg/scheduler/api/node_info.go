@@ -28,6 +28,7 @@ import (
 	"volcano.sh/apis/pkg/apis/scheduling"
 	"volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 
+	"volcano.sh/volcano/pkg/scheduler/api/devices/ascend"
 	"volcano.sh/volcano/pkg/scheduler/api/devices/nvidia/gpushare"
 	"volcano.sh/volcano/pkg/scheduler/api/devices/nvidia/vgpu"
 )
@@ -349,9 +350,11 @@ func (ni *NodeInfo) setNodeOthersResource(node *v1.Node) {
 
 	ni.Others[gpushare.DeviceName] = gpushare.NewGPUDevices(ni.Name, node)
 	ni.Others[vgpu.DeviceName] = vgpu.NewGPUDevices(ni.Name, node)
+	ni.Others[ascend.DeviceName] = ascend.NewDevices(ni.Name, node)
 	IgnoredDevicesList.Set(
 		ni.Others[gpushare.DeviceName].(Devices).GetIgnoredDevices(),
 		ni.Others[vgpu.DeviceName].(Devices).GetIgnoredDevices(),
+		ni.Others[ascend.DeviceName].(Devices).GetIgnoredDevices(),
 	)
 }
 
@@ -495,14 +498,39 @@ func (ni *NodeInfo) RemoveTask(ti *TaskInfo) error {
 
 // addResource is used to add sharable devices
 func (ni *NodeInfo) addResource(pod *v1.Pod) {
-	ni.Others[gpushare.DeviceName].(Devices).AddResource(pod)
-	ni.Others[vgpu.DeviceName].(Devices).AddResource(pod)
+	resource := Resource{ScalarResources: make(map[v1.ResourceName]float64)}
+	m := ni.Others[gpushare.DeviceName].(Devices).AddResource(pod)
+	for key, val := range m {
+		resource.ScalarResources[v1.ResourceName(key)] = val
+	}
+	m = ni.Others[vgpu.DeviceName].(Devices).AddResource(pod)
+	for key, val := range m {
+		resource.ScalarResources[v1.ResourceName(key)] = val
+	}
+	m = ni.Others[ascend.DeviceName].(Devices).AddResource(pod)
+	for key, val := range m {
+		resource.ScalarResources[v1.ResourceName(key)] = val
+	}
+	ni.Used.Add(&resource)
 }
 
 // subResource is used to subtract sharable devices
 func (ni *NodeInfo) subResource(pod *v1.Pod) {
-	ni.Others[gpushare.DeviceName].(Devices).SubResource(pod)
-	ni.Others[vgpu.DeviceName].(Devices).SubResource(pod)
+	resource := Resource{ScalarResources: make(map[v1.ResourceName]float64)}
+	m := ni.Others[gpushare.DeviceName].(Devices).SubResource(pod)
+	for key, val := range m {
+		resource.ScalarResources[v1.ResourceName(key)] = val
+	}
+	m = ni.Others[vgpu.DeviceName].(Devices).SubResource(pod)
+	for key, val := range m {
+		resource.ScalarResources[v1.ResourceName(key)] = val
+	}
+	m = ni.Others[ascend.DeviceName].(Devices).SubResource(pod)
+	for key, val := range m {
+		resource.ScalarResources[v1.ResourceName(key)] = val
+	}
+
+	ni.Used.Sub(&resource)
 }
 
 // UpdateTask is used to update a task in nodeInfo object.
