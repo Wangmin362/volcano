@@ -1,0 +1,226 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: volcano-system
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: volcano-monitoring
+---
+# Source: volcano/templates/scheduler.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: volcano-scheduler-configmap
+  namespace: volcano-system
+data:
+  volcano-scheduler.conf: |
+    actions: "enqueue, allocate, backfill"
+    tiers:
+    - plugins:
+      - name: priority
+        enableNodeOrder: false
+      - name: gang
+        enableNodeOrder: false
+      - name: conformance 
+        enableNodeOrder: false
+      - name: volcano-npu_v6.0.RC2.1_linux
+    - plugins:
+      - name: drf
+        enableNodeOrder: false
+      - name: predicates
+        enableNodeOrder: false
+        arguments:
+          predicate.GPUSharingEnable: false
+          predicate.GPUNumberEnable: false
+      - name: proportion
+        enableNodeOrder: false
+      - name: nodeorder
+      - name: binpack
+        enableNodeOrder: false
+    configurations:
+      - name: init-params
+        arguments: {"grace-over-time":"900","presetVirtualDevice":"true","nslb-version":"1.0","shared-tor-num":"2",
+    "useClusterInfoManager":"true","super-pod-size": "48", "reserve-nodes": "2"}
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: volcano-scheduler
+  namespace: volcano-system
+---
+# Source: volcano/templates/scheduler.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: volcano-scheduler
+rules:
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: ["batch.volcano.sh"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "update", "delete"]
+  - apiGroups: ["batch.volcano.sh"]
+    resources: ["jobs/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/status"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "bind", "updateStatus", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/binding"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["namespaces", "services", "replicationcontrollers"]
+    verbs: ["list", "watch", "get"]
+  - apiGroups: [""]
+    resources: ["resourcequotas"]
+    verbs: ["list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["list", "watch"]
+  - apiGroups: [ "storage.k8s.io" ]
+    resources: ["storageclasses", "csinodes", "csidrivers", "csistoragecapacities"]
+    verbs: [ "list", "watch" ]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["scheduling.incubator.k8s.io", "scheduling.volcano.sh"]
+    resources: ["queues"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["scheduling.incubator.k8s.io", "scheduling.volcano.sh"]
+    resources: ["queues/status"]
+    verbs: ["update"]
+  - apiGroups: ["scheduling.incubator.k8s.io", "scheduling.volcano.sh"]
+    resources: ["podgroups"]
+    verbs: ["list", "watch", "update"]
+  - apiGroups: ["nodeinfo.volcano.sh"]
+    resources: ["numatopologies"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "delete", "update","list","watch"]
+  - apiGroups: ["apps"]
+    resources: ["daemonsets", "replicasets", "statefulsets", "deployments"]
+    verbs: ["list", "watch", "get"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: volcano-scheduler-role
+subjects:
+  - kind: ServiceAccount
+    name: volcano-scheduler
+    namespace: volcano-system
+roleRef:
+  kind: ClusterRole
+  name: volcano-scheduler
+  apiGroup: rbac.authorization.k8s.io
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: volcano-scheduler
+  namespace: volcano-system
+  labels:
+    app: volcano-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: volcano-scheduler
+  template:
+    metadata:
+      labels:
+        app: volcano-scheduler
+      annotations:
+        seccomp.security.alpha.kubernetes.io/pod: runtime/default
+    spec:
+      nodeSelector:
+        masterselector: dls-master-node
+      serviceAccount: volcano-scheduler
+      securityContext:
+        fsGroup: 9000
+      containers:
+        - name: volcano-scheduler
+          image: volcanosh/vc-scheduler:v1.7.0
+          command: ["/bin/ash"]
+          args: ["-c", "umask 027; /vc-scheduler
+                  --scheduler-conf=/volcano.scheduler/volcano-scheduler.conf
+                  --plugins-dir=plugins
+                  --logtostderr=false
+                  --log_dir=/var/log/mindx-dl/volcano-scheduler
+                  --log_file=/var/log/mindx-dl/volcano-scheduler/volcano-scheduler.log
+                  -v=2 2>&1"]
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            requests:
+              memory: 4Gi
+              cpu: 5500m
+            limits:
+              memory: 8Gi
+              cpu: 5500m
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsUser: 9000
+            runAsGroup: 9000
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: scheduler-config
+              mountPath: /volcano.scheduler
+              readOnly: true
+            - name: scheduler-config-log
+              mountPath: /var/log/mindx-dl/volcano-scheduler
+            - name: localtime
+              mountPath: /etc/localtime
+              readOnly: true
+      volumes:
+        - name: scheduler-config
+          configMap:
+            defaultMode: 0004
+            name: volcano-scheduler-configmap
+        - name: scheduler-config-log
+          hostPath:
+            path: /var/log/mindx-dl/volcano-scheduler
+            type: Directory
+        - name: localtime
+          hostPath:
+            path: /etc/localtime
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8080"
+    prometheus.io/scrape: "true"
+  name: volcano-scheduler-service
+  namespace: volcano-system
+spec:
+  ports:
+    - port: 8080
+      protocol: TCP
+      targetPort: 8080
+  selector:
+    app: volcano-scheduler
+  type: ClusterIP

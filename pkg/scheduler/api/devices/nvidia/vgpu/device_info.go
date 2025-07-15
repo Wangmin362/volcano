@@ -148,12 +148,13 @@ func (gs *GPUDevices) GetIgnoredDevices() []string {
 }
 
 // AddResource adds the pod to GPU pool if it is assigned
-func (gs *GPUDevices) AddResource(pod *v1.Pod) {
+func (gs *GPUDevices) AddResource(pod *v1.Pod) map[string]float64 {
 	if gs == nil {
-		return
+		return nil
 	}
 
 	gs.addResource(pod.Annotations, pod)
+	return nil
 }
 
 func (gs *GPUDevices) addResource(annotations map[string]string, pod *v1.Pod) {
@@ -180,13 +181,13 @@ func (gs *GPUDevices) addResource(annotations map[string]string, pod *v1.Pod) {
 }
 
 // SubResource frees the gpu hold by the pod
-func (gs *GPUDevices) SubResource(pod *v1.Pod) {
+func (gs *GPUDevices) SubResource(pod *v1.Pod) map[string]float64{
 	if gs == nil {
-		return
+		return nil
 	}
 	ids, ok := pod.Annotations[AssignedIDsAnnotations]
 	if !ok {
-		return
+		return nil
 	}
 	podDev := decodePodDevices(ids)
 	for _, val := range podDev {
@@ -202,6 +203,7 @@ func (gs *GPUDevices) SubResource(pod *v1.Pod) {
 			}
 		}
 	}
+	return nil
 }
 
 func (gs *GPUDevices) HasDeviceRequest(pod *v1.Pod) bool {
