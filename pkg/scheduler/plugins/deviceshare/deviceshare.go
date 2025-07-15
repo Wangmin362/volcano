@@ -28,6 +28,7 @@ import (
 
 	"volcano.sh/volcano/pkg/scheduler/api"
 	"volcano.sh/volcano/pkg/scheduler/api/devices"
+	"volcano.sh/volcano/pkg/scheduler/api/devices/ascend"
 	"volcano.sh/volcano/pkg/scheduler/api/devices/nvidia/gpushare"
 	"volcano.sh/volcano/pkg/scheduler/api/devices/nvidia/vgpu"
 	"volcano.sh/volcano/pkg/scheduler/framework"
@@ -85,6 +86,15 @@ func enablePredicate(dsp *deviceSharePlugin) {
 	if (gpushare.GpuSharingEnable || gpushare.GpuNumberEnable) && vgpu.VGPUEnable {
 		klog.Fatal("gpu-share and vgpu can't be used together")
 	}
+
+	/* for ascend vnpu scheduler */
+	args.GetBool(&ascend.AscendVGPUEnable, AscendVGPUEnable)
+	_, ok = args[AscendVGPUConfigPath]
+	if ok {
+		ascend.AscendVGPUConfigPath = args[AscendVGPUConfigPath].(string)
+	}
+	klog.Infof("enablePredicate: AscendVGPUEnable=%v, AscendVGPUConfigPath=%v",
+		ascend.AscendVGPUEnable, ascend.AscendVGPUConfigPath)
 }
 
 func createStatus(code int, reason string) *api.Status {

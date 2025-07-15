@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package vgpu
+package ascend
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
@@ -33,50 +33,47 @@ const (
 )
 
 var (
-	VGPUDevicesSharedNumber = promauto.NewGaugeVec(
+	VNPUDevicesSharedNumber = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: VolcanoNamespace,
-			Name:      "vgpu_device_shared_number",
+			Name:      "vnpu_device_shared_number",
 			Help:      "The number of vgpu tasks sharing this card",
 		},
 		[]string{"devID"},
 	)
-	VGPUDevicesSharedMemory = promauto.NewGaugeVec(
+	VNPUDevicesSharedMemory = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: VolcanoNamespace,
-			Name:      "vgpu_device_allocated_memory",
+			Name:      "vnpu_device_allocated_memory",
 			Help:      "The number of vgpu memory allocated in this card",
 		},
 		[]string{"devID"},
 	)
-	VGPUDevicesSharedCores = promauto.NewGaugeVec(
+	VNPUDevicesSharedCores = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: VolcanoNamespace,
-			Name:      "vgpu_device_allocated_cores",
+			Name:      "vnpu_device_allocated_cores",
 			Help:      "The percentage of gpu compute cores allocated in this card",
 		},
 		[]string{"devID"},
 	)
-	VGPUDevicesMemoryLimit = promauto.NewGaugeVec(
+	VNPUDevicesMemoryLimit = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: VolcanoNamespace,
-			Name:      "vgpu_device_memory_limit",
+			Name:      "vnpu_device_memory_limit",
 			Help:      "The number of total device memory allocated in this card",
 		},
 		[]string{"devID"},
 	)
 )
 
-func (gs *GPUDevices) GetStatus() string {
-	if gs == nil {
-		return ""
-	}
+func (gs *Devices) GetStatus() string {
 	for _, val := range gs.Device {
 		if val != nil {
-			VGPUDevicesSharedNumber.WithLabelValues(val.UUID).Set(float64(val.UsedNum))
-			VGPUDevicesSharedMemory.WithLabelValues(val.UUID).Set(float64(val.UsedMem))
-			VGPUDevicesMemoryLimit.WithLabelValues(val.UUID).Set(float64(val.Memory))
-			VGPUDevicesSharedCores.WithLabelValues(val.UUID).Set(float64(val.UsedCore))
+			VNPUDevicesSharedNumber.WithLabelValues(val.ID).Set(float64(val.UsedNum))
+			VNPUDevicesSharedMemory.WithLabelValues(val.ID).Set(float64(val.UsedMem))
+			VNPUDevicesMemoryLimit.WithLabelValues(val.ID).Set(float64(val.Devmem))
+			VNPUDevicesSharedCores.WithLabelValues(val.ID).Set(float64(val.UsedCore))
 		}
 	}
 	return ""
