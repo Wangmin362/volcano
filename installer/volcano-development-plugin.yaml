@@ -4609,6 +4609,8 @@ data:
       - name: deviceshare
         arguments:
           deviceshare.VGPUEnable: true
+          deviceshare.KnownGeometriesCMName: "volcano-vgpu-device-config"
+          deviceshare.KnownGeometriesCMNamespace: "rise-vast-system"
           deviceshare.AscendVGPUEnable: true  # enable npu
       - name: predicates
         enableNodeOrder: false
