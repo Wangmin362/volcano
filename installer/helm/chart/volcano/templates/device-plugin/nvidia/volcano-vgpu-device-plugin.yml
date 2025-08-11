@@ -169,12 +169,12 @@ roleRef:
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: volcano-device-plugin
+  name: hami-device-plugin-volcano-nvidia
   namespace: {{ .Release.Namespace }}
 spec:
   selector:
     matchLabels:
-      name: volcano-device-plugin
+      name: hami-device-plugin-volcano-nvidia
   updateStrategy:
     type: RollingUpdate
   template:
@@ -184,7 +184,7 @@ spec:
       annotations:
         scheduler.alpha.kubernetes.io/critical-pod: ""
       labels:
-        name: volcano-device-plugin
+        name: hami-device-plugin-volcano-nvidia
     spec:
       tolerations:
       # This toleration is deprecated. Kept here for backward compatibility
@@ -208,7 +208,7 @@ spec:
           postStart:
             exec:
               command: ["/bin/sh", "-c", "cp -f /k8s-vgpu/lib/nvidia/* /usr/local/vgpu/"]
-        name: volcano-device-plugin
+        name: hami-device-plugin-volcano-nvidia
         env:
         - name: NODE_NAME
           valueFrom:
