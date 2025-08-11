@@ -54,11 +54,11 @@ rules:
     resources: ["events"]
     verbs: ["create", "list", "watch", "update", "patch"]
   - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list", "watch", "patch", "delete"]
+    resources: ["services"]
+    verbs: ["get"]
   - apiGroups: [""]
-    resources: ["pods/status"]
-    verbs: ["update"]
+    resources: ["pods", "pods/status"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "bind", "updateStatus", "delete"]
   - apiGroups: [""]
     resources: ["pods/binding"]
     verbs: ["create"]
@@ -103,9 +103,9 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs: ["get", "create", "delete", "update"]
+    verbs: ["get", "create", "delete", "update","list","watch"]
   - apiGroups: ["apps"]
-    resources: ["daemonsets", "replicasets", "statefulsets"]
+    resources: ["daemonsets", "replicasets", "statefulsets", "deployments"]
     verbs: ["list", "watch", "get"]
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
@@ -175,7 +175,7 @@ spec:
       securityContext:
         {{- toYaml $scheduler_sc | nindent 8 }}
       {{- end }}
-      serviceAccount: {{ .Release.Name }}-scheduler
+      serviceAccountName: {{ .Release.Name }}-scheduler
       priorityClassName: system-cluster-critical
       {{- if .Values.basic.image_pull_secret }}
       imagePullSecrets:
@@ -183,7 +183,7 @@ spec:
       {{- end }}
       containers:
         - name: {{ .Release.Name }}-scheduler
-          image: {{ .Values.basic.image_registry }}/{{.Values.basic.scheduler_image_name}}:{{.Values.basic.image_tag_version}}
+          image: {{ .Values.basic.image_registry }}/{{.Values.basic.scheduler_image_name}}:{{.Values.basic.image_tag_version_scheduler}}
           {{- if .Values.custom.scheduler_resources }}
           resources:
           {{- toYaml .Values.custom.scheduler_resources | nindent 12 }}
@@ -234,6 +234,13 @@ spec:
               mountPath: /volcano.scheduler
             - name: klog-sock
               mountPath: /tmp/klog-socks
+            - name: device-config
+              mountPath: /device-config.yaml
+              subPath: device-config.yaml
+              readOnly: true
+            - name: localtime
+              mountPath: /etc/localtime
+              readOnly: true
           {{- if $scheduler_main_csc }}
           securityContext:
             {{- toYaml $scheduler_main_csc | nindent 12 }}
@@ -244,6 +251,12 @@ spec:
             name: {{ .Release.Name }}-scheduler-configmap
         - name: klog-sock
           emptyDir: {}
+        - name: device-config
+          configMap:
+            name: hami-scheduler-device
+        - name: localtime
+          hostPath:
+            path: /etc/localtime
 ---
 apiVersion: v1
 kind: Service
