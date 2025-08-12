@@ -21,11 +21,15 @@ deviceplugin:
     nodeSelector:
       volcano-ascend: "on"
   nvidia:
-    enable: false
+    enabled: false
+    resourcePrefix: "hami-device-plugin"
     nodeSelector:
       volcano: "on"
     image: "quanzhenglong.com/camp/volcano-vgpu-device-plugin:v1.10.0"
     imagePullPolicy: "Always"
+    monitor:
+      service:
+        httpPort: 31994
 custom:
   metrics_enable: false
   admission_enable: true

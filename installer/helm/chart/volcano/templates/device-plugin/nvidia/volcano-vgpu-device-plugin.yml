@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-{{- if .Values.deviceplugin.nvidia.enable }}
+{{- if .Values.deviceplugin.nvidia.enabled }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -132,13 +132,13 @@ data:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: volcano-device-plugin
+  name: {{ .Values.deviceplugin.nvidia.resourcePrefix | default "hami-device-plugin" }}-volcano-nvidia
   namespace: {{ .Release.Namespace }}
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: volcano-device-plugin
+  name: {{ .Values.deviceplugin.nvidia.resourcePrefix | default "hami-device-plugin" }}-volcano-nvidia
 rules:
 - apiGroups: [""]
   resources: ["nodes"]
@@ -156,25 +156,25 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: volcano-device-plugin
+  name: {{ .Values.deviceplugin.nvidia.resourcePrefix | default "hami-device-plugin" }}-volcano-nvidia
 subjects:
 - kind: ServiceAccount
-  name: volcano-device-plugin
+  name: {{ .Values.deviceplugin.nvidia.resourcePrefix | default "hami-device-plugin" }}-volcano-nvidia
   namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: volcano-device-plugin
+  name: {{ .Values.deviceplugin.nvidia.resourcePrefix | default "hami-device-plugin" }}-volcano-nvidia
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: hami-device-plugin-volcano-nvidia
+  name: {{ .Values.deviceplugin.nvidia.resourcePrefix | default "hami-device-plugin" }}-volcano-nvidia
   namespace: {{ .Release.Namespace }}
 spec:
   selector:
     matchLabels:
-      name: hami-device-plugin-volcano-nvidia
+      name: {{ .Values.deviceplugin.nvidia.resourcePrefix | default "hami-device-plugin" }}-volcano-nvidia
   updateStrategy:
     type: RollingUpdate
   template:
@@ -184,7 +184,7 @@ spec:
       annotations:
         scheduler.alpha.kubernetes.io/critical-pod: ""
       labels:
-        name: hami-device-plugin-volcano-nvidia
+        name: {{ .Values.deviceplugin.nvidia.resourcePrefix | default "hami-device-plugin" }}-volcano-nvidia
     spec:
       tolerations:
       # This toleration is deprecated. Kept here for backward compatibility
@@ -199,16 +199,16 @@ spec:
       # be rescheduled after a failure.
       # See https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/
       priorityClassName: "system-node-critical"
-      serviceAccountName: volcano-device-plugin
+      serviceAccountName: {{ .Values.deviceplugin.nvidia.resourcePrefix | default "hami-device-plugin" }}-volcano-nvidia
       containers:
       - image: {{ .Values.deviceplugin.nvidia.image | default "quanzhenglong.com/camp/volcano-vgpu-device-plugin:v1.10.0" }}
         imagePullPolicy: {{ .Values.deviceplugin.nvidia.imagePullPolicy | default "Always" }}
-        args: ["--device-split-count=10"]
+        args: ["--device-split-count=1", "--gpu-memory-factor=10"]
         lifecycle:
           postStart:
             exec:
               command: ["/bin/sh", "-c", "cp -f /k8s-vgpu/lib/nvidia/* /usr/local/vgpu/"]
-        name: hami-device-plugin-volcano-nvidia
+        name: volcano-device-plugin
         env:
         - name: NODE_NAME
           valueFrom:
