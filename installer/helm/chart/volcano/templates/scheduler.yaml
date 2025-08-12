@@ -36,6 +36,9 @@ rules:
     resources: ["events"]
     verbs: ["create", "list", "watch", "update", "patch"]
   - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get"]
+  - apiGroups: [""]
     resources: ["pods", "pods/status"]
     verbs: ["create", "get", "list", "watch", "update", "patch", "bind", "updateStatus", "delete"]
   - apiGroups: [""]
@@ -67,7 +70,7 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: ["scheduling.incubator.k8s.io", "scheduling.volcano.sh"]
     resources: ["queues"]
-    verbs: ["get", "list", "watch", "create", "delete"]
+    verbs: ["get", "list", "watch", "create", "delete", "update"]
   - apiGroups: ["scheduling.incubator.k8s.io", "scheduling.volcano.sh"]
     resources: ["queues/status"]
     verbs: ["update"]
@@ -79,9 +82,9 @@ rules:
     verbs: ["get", "list", "watch", "delete"]
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs: ["get", "create", "delete", "update"]
+    verbs: ["get", "create", "delete", "update","list","watch"]
   - apiGroups: ["apps"]
-    resources: ["daemonsets", "replicasets", "statefulsets"]
+    resources: ["daemonsets", "replicasets", "statefulsets", "deployments"]
     verbs: ["list", "watch", "get"]
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
@@ -146,7 +149,7 @@ spec:
       {{- end }}
       containers:
         - name: {{ .Release.Name }}-scheduler
-          image: {{.Values.basic.scheduler_image_name}}:{{.Values.basic.image_tag_version}}
+          image: {{.Values.basic.image_registry}}/{{.Values.basic.scheduler_image_name}}:{{.Values.basic.image_tag_version_scheduler}}
           {{- if .Values.custom.scheduler_resources }}
           resources:
           {{- toYaml .Values.custom.scheduler_resources | nindent 12 }}
@@ -156,6 +159,7 @@ spec:
             - --scheduler-conf=/volcano.scheduler/{{base .Values.basic.scheduler_config_file}}
             - --enable-healthz=true
             - --enable-metrics=true
+            - --plugins-dir=plugins
             {{- if .Values.custom.scheduler_pprof_enable }}
             - --enable-pprof=true
             {{- end }}
@@ -174,6 +178,13 @@ spec:
               mountPath: /volcano.scheduler
             - name: klog-sock
               mountPath: /tmp/klog-socks
+            - name: device-config
+              mountPath: /device-config.yaml
+              subPath: device-config.yaml
+              readOnly: true
+            - name: localtime
+              mountPath: /etc/localtime
+              readOnly: true
           {{- if $scheduler_main_csc }}
           securityContext:
             {{- toYaml $scheduler_main_csc | nindent 12 }}
@@ -185,6 +196,12 @@ spec:
         - name: klog-sock
           hostPath:
             path: /tmp/klog-socks
+        - name: device-config
+          configMap:
+            name: hami-scheduler-device
+        - name: localtime
+          hostPath:
+            path: /etc/localtime
 ---
 apiVersion: v1
 kind: Service

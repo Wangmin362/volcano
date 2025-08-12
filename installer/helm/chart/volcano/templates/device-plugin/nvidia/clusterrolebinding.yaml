@@ -1,0 +1,14 @@
+{{- if .Values.deviceplugin.nvidia.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.deviceplugin.nvidia.resourcePrefix | default "hami-device-plugin" }}-volcano-nvidia
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.deviceplugin.nvidia.resourcePrefix | default "hami-device-plugin" }}-volcano-nvidia
+    namespace: {{ .Release.Namespace | quote }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Values.deviceplugin.nvidia.resourcePrefix | default "hami-device-plugin" }}-volcano-nvidia
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

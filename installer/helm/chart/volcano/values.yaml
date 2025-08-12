@@ -8,7 +8,27 @@ basic:
   image_pull_secret: ""
   image_pull_policy: "Always"
   image_tag_version: "v1.9.1"
+  image_tag_version_scheduler: "v1.9.1-6.0.rc2.1-amd64-01"
   admission_port: 8443
+  image_registry: "quanzhenglong.com/camp"
+deviceplugin:
+  ascend:
+    enabled: false
+    resourcePrefix: "hami-device-plugin"
+    image: "quanzhenglong.com/camp/ascend-device-plugin:v2.4.4-08"
+    imagePullPolicy: "Always"
+    nodeSelector:
+      volcano-ascend: "on"
+  nvidia:
+    enabled: false
+    resourcePrefix: "hami-device-plugin"
+    nodeSelector:
+      volcano: "on"
+    image: "quanzhenglong.com/camp/volcano-vgpu-device-plugin:main-69e8c3c-fix2"
+    imagePullPolicy: "Always"
+    monitor:
+      service:
+        httpPort: 31994
 custom:
   metrics_enable: false
   admission_enable: true

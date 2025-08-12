@@ -1,0 +1,19 @@
+{{- if .Values.deviceplugin.nvidia.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Values.deviceplugin.nvidia.resourcePrefix | default "hami-device-plugin" }}-volcano-nvidia
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    release: prometheus
+spec:
+  endpoints:
+    - port: monitorport
+      path: /metrics
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: {{ .Values.deviceplugin.nvidia.resourcePrefix | default "hami-device-plugin" }}-volcano-nvidia
+{{- end }}
