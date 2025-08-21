@@ -19,7 +19,7 @@ deviceplugin:
     image: "quanzhenglong.com/camp/ascend-device-plugin:v2.4.4-08"
     imagePullPolicy: "Always"
     nodeSelector:
-      volcano-ascend: "on"
+      volcano_ascend: "on"
   nvidia:
     enabled: false
     resourcePrefix: "hami-device-plugin"
