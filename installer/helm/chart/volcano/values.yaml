@@ -9,7 +9,7 @@ basic:
   image_pull_secret: ""
   image_pull_policy: "Always"
   image_tag_version: "v1.12.1"
-  image_tag_version_scheduler: "v1.12.1-6.0.rc2.1-01"
+  image_tag_version_scheduler: "v1.12.1-6.0.rc2.1-amd64-01"
   admission_port: 8443
   image_registry: "quanzhenglong.com/camp"
 deviceplugin:
