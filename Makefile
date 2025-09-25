@@ -229,3 +229,8 @@ lint-licenses:
 .PHONY: licenses-check
 licenses-check: mirror-licenses; \
     hack/licenses-check.sh
+
+deploy:
+	@echo "🚀 Deploying volcano..."
+	@cd installer/helm/chart/volcano/ && helm upgrade --install volcano . --create-namespace -n rise-vast-system -f values.yaml
+	@echo "✅ volcano deployed successfully!"

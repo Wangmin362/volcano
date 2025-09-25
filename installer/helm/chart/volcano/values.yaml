@@ -14,14 +14,14 @@ basic:
   image_registry: "quanzhenglong.com/camp"
 deviceplugin:
   ascend:
-    enabled: false
+    enabled: true
     resourcePrefix: "hami-device-plugin"
     image: "quanzhenglong.com/camp/ascend-device-plugin:v2.4.4-08"
     imagePullPolicy: "Always"
     nodeSelector:
       volcano_ascend: "on"
   nvidia:
-    enabled: false
+    enabled: true
     resourcePrefix: "hami-device-plugin"
     nodeSelector:
       volcano: "on"
@@ -29,7 +29,7 @@ deviceplugin:
     imagePullPolicy: "Always"
     monitor:
       service:
-        httpPort: 31994
+        httpPort: 31997
 custom:
   metrics_enable: false
   admission_enable: true
