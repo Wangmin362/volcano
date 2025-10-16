@@ -1,0 +1,5 @@
+FROM alpine:latest
+COPY vc-scheduler /vc-scheduler
+COPY volcano-npu_*.so plugins/
+RUN chmod 750 plugins vc-scheduler && chmod 750 plugins/*.so
+ENTRYPOINT ["/vc-scheduler"]

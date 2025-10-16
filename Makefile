@@ -234,3 +234,45 @@ deploy:
 	@echo "🚀 Deploying volcano..."
 	@cd installer/helm/chart/volcano/ && helm upgrade --install volcano . --create-namespace -n rise-vast-system -f values.yaml
 	@echo "✅ volcano deployed successfully!"
+
+build-multi:
+	@if [ -z "$${GOPATH}" ]; then echo "❌ $${GOPATH} 环境变量不存在，请先设置"; exit 1; fi
+# 检查是否安装了musl-gcc, 如果没有安装，报错并退出
+# 检查/usr/local/musl/bin/musl-gcc是否存在，如果不存在，就建立一个软连接
+# 如果$GOPATH/src/volcano.sh目录不存在，创建目录
+	@if [ ! -d "$${GOPATH}/src/volcano.sh" ]; then mkdir -p $${GOPATH}/src/volcano.sh; fi
+# 如果$GOPATH/src/volcano.sh/volcano目录存在，删除这个目录
+	@if [ -d "$${GOPATH}/src/volcano.sh/volcano" ]; then rm -rf $${GOPATH}/src/volcano.sh/volcano; fi
+# 拷贝项目到$GOPATH/src/volcano.sh/volcano目录
+	@cp -r . $${GOPATH}/src/volcano.sh/volcano
+	@echo "✅ 项目已拷贝到 $${GOPATH}/src/volcano.sh/volcano 目录"
+	@echo "当前分支为："
+	@cd $${GOPATH}/src/volcano.sh/volcano && git branch --show-current
+# 删除$GOPATH/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin目录
+	@if [ -d "$${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin" ]; then rm -rf $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin; fi
+# 拷贝插件到$GOPATH/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin目录
+	@cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ && git clone -b v6.0.0-RC2.1 git@gitee.com:wangmin362/ascend-for-volcano.git ascend-volcano-plugin
+	@echo "✅ 插件已拷贝到 $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin 目录"
+	@echo "当前插件分支为："
+	@cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin && git branch --show-current
+	sed -i 's/npuNode\.Capability\.ScalarResources/npuNode\.Capacity\.ScalarResources/g' $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/plugin/node.go
+	sed -i 's/volcano-npu_v6\.0\.RC1/volcano-npu_v6\.0\.RC2\.1/g' $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/type.go
+	sed -i 's/REL_NPU_PLUGIN=volcano-npu_$${REL_VERSION}_linux-$${REL_ARCH}/REL_NPU_PLUGIN=volcano-npu_v6.0.RC2.1_linux/g' $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build/build.sh
+	@echo "✅ 插件已更新为 v6.0.RC2.1 版本, 并且已经修改 build.sh 文件"
+	cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin && git diff
+	@ cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build && chmod +x build.sh
+	@echo "✅ 编译X86插件以及volcano scheduler"
+	@ cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build && ./build.sh v1.7.0
+	@echo "✅ 编译完成, 开始打包X86镜像"
+	docker buildx build --platform linux/amd64 -t quanzhenglong.com/camp/volcanosh/vc-scheduler:v1.12.1-6.0.rc2.1-amd64-02 --push -f ./Dockerfile.local .
+	@echo "✅ 编译ARM64插件以及volcano scheduler，替换工具链 & GOARCH"
+	sed -i \
+	    -e 's|CC=/usr/local/musl/bin/musl-gcc|CC=/usr/local/musl-aarch64/bin/aarch64-linux-musl-gcc|g' \
+	    -e 's|go build|GOOS=linux GOARCH=arm64 &|g' \
+	    ${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build/build.sh
+	@# 3. 开始交叉编译
+	# cd ${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build && ./build.sh v1.7.0
+	@echo "✅ ARM64 编译完成，开始打包 ARM64 镜像"
+	# docker buildx build --platform linux/arm64 -t quanzhenglong.com/camp/volcanosh/vc-scheduler:v1.12.1-6.0.rc2.1-arm64-02 --push -f ./Dockerfile.local .
+
+
