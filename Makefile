@@ -297,7 +297,7 @@ build-multi:
       quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-amd64 --arch amd64 && \
     docker manifest annotate ${IMAGE_TAG} \
       quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-arm64 --arch arm64 && \
-    docker manifest push ${IMAGE_TAG} && \
-    echo "✅ 构建多架构镜像完成，可以通过命令验证：docker manifest inspect ${IMAGE_TAG}"
+    docker manifest push quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}
+    @echo "✅ 构建多架构镜像完成，可以通过命令验证：docker manifest inspect quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}"
 
 
