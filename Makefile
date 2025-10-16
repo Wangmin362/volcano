@@ -281,7 +281,6 @@ build-multi:
 	@ cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build && git diff
 	@echo "✅ 编译X86插件以及volcano scheduler"
 	cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build && ./build.sh v1.7.0
-	@ cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build && ./build.sh v1.7.0
 	@ cp $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/output/vc-scheduler .
 	@ cp $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/output/volcano-npu_*.so .
 	@echo "✅ vc-scheduler编译完成, 架构为："
@@ -291,5 +290,14 @@ build-multi:
 	@echo "✅ ARM64 编译完成，开始打包 ARM64 镜像"
 	docker buildx build --platform linux/arm64 -t quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-arm64 --push -f ./Dockerfile.local .
 	rm vc-scheduler volcano-npu_*.so -f
+	docker manifest create ${IMAGE_TAG} \
+	  --amend quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-amd64 \
+	  --amend quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-arm64 && \
+	docker manifest annotate ${IMAGE_TAG} \
+      quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-amd64 --arch amd64 && \
+    docker manifest annotate ${IMAGE_TAG} \
+      quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-arm64 --arch arm64 && \
+    docker manifest push ${IMAGE_TAG} && \
+    echo "✅ 构建多架构镜像完成，可以通过命令验证：docker manifest inspect ${IMAGE_TAG}"
 
 
