@@ -260,7 +260,7 @@ build-multi:
 	sed -i 's/volcano-npu_v6\.0\.RC1/volcano-npu_v6\.0\.RC2\.1/g' $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/type.go
 	sed -i 's/REL_NPU_PLUGIN=volcano-npu_$${REL_VERSION}_linux-$${REL_ARCH}/REL_NPU_PLUGIN=volcano-npu_v6.0.RC2.1_linux/g' $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build/build.sh
 	@echo "✅ 插件已更新为 v6.0.RC2.1 版本, 并且已经修改 build.sh 文件"
-	cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin && git diff
+	cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin && git --no-pager diff
 	@echo "✅ 编译X86插件以及volcano scheduler"
 	@ cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build && chmod +x build.sh
 	@ cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build && ./build.sh v1.7.0
@@ -278,7 +278,7 @@ build-multi:
 	    -e 's|CC=/usr/local/musl/bin/musl-gcc|CC=/usr/local/musl-aarch64/bin/aarch64-linux-musl-gcc|g' \
 	    -e 's|go build|GOOS=linux GOARCH=arm64 &|g' \
 	    $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build/build.sh
-	@ cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build && git diff
+	@ cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build && git --no-pager diff
 	@echo "✅ 编译X86插件以及volcano scheduler"
 	cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build && ./build.sh v1.7.0
 	@ cp $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/output/vc-scheduler .
