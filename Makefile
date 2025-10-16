@@ -251,7 +251,7 @@ build-multi:
 # 删除$GOPATH/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin目录
 	@if [ -d "$${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin" ]; then rm -rf $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin; fi
 # 拷贝插件到$GOPATH/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin目录
-	@cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ && git clone -b v6.0.0-RC2.1 git@gitee.com:wangmin362/ascend-for-volcano.git ascend-volcano-plugin
+	@cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ && git clone -b v6.0.0-RC2.1 https://gitee.com/wangmin362/ascend-for-volcano.git ascend-volcano-plugin
 	@echo "✅ 插件已拷贝到 $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin 目录"
 	@echo "当前插件分支为："
 	@cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin && git branch --show-current
