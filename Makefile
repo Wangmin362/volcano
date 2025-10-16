@@ -269,9 +269,9 @@ build-multi:
 	sed -i \
 	    -e 's|CC=/usr/local/musl/bin/musl-gcc|CC=/usr/local/musl-aarch64/bin/aarch64-linux-musl-gcc|g' \
 	    -e 's|go build|GOOS=linux GOARCH=arm64 &|g' \
-	    ${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build/build.sh
-	@# 3. 开始交叉编译
-	# cd ${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build && ./build.sh v1.7.0
+	    $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build/build.sh
+	@ cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build && git diff
+	# cd $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/build && ./build.sh v1.7.0
 	@echo "✅ ARM64 编译完成，开始打包 ARM64 镜像"
 	# docker buildx build --platform linux/arm64 -t quanzhenglong.com/camp/volcanosh/vc-scheduler:v1.12.1-6.0.rc2.1-arm64-02 --push -f ./Dockerfile.local .
 
