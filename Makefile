@@ -290,12 +290,12 @@ build-multi:
 	@echo "✅ ARM64 编译完成，开始打包 ARM64 镜像"
 	docker buildx build --platform linux/arm64 -t quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-arm64 --push -f ./Dockerfile.local .
 	rm vc-scheduler volcano-npu_*.so -f
-	docker manifest create ${IMAGE_TAG} \
+	docker manifest create quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG} \
 	  --amend quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-amd64 \
 	  --amend quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-arm64 && \
-	docker manifest annotate ${IMAGE_TAG} \
+	docker manifest annotate quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG} \
       quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-amd64 --arch amd64 && \
-    docker manifest annotate ${IMAGE_TAG} \
+    docker manifest annotate quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG} \
       quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-arm64 --arch arm64 && \
     docker manifest push quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}
     @echo "✅ 构建多架构镜像完成，可以通过命令验证：docker manifest inspect quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}"
