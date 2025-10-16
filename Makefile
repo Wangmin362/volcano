@@ -271,7 +271,8 @@ build-multi:
 	@echo "✅ volcano-npu_*.so编译完成, 架构为："
 	file -b $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/output/volcano-npu_*.so
 	@echo "✅ 编译完成, 开始打包X86镜像"
-	docker buildx build --platform linux/amd64 -t quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-amd64 --push -f ./Dockerfile.local .
+	docker buildx build --platform linux/amd64 -t quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-amd64 --load -f ./Dockerfile.local .
+	docker push quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-amd64
 	rm vc-scheduler volcano-npu_*.so -f
 	@echo "✅ 编译ARM64插件以及volcano scheduler，替换工具链 & GOARCH"
 	sed -i \
@@ -288,7 +289,8 @@ build-multi:
 	@echo "✅ volcano-npu_*.so编译完成, 架构为："
 	file -b $${GOPATH}/src/volcano.sh/volcano/pkg/scheduler/plugins/ascend-volcano-plugin/output/volcano-npu_*.so
 	@echo "✅ ARM64 编译完成，开始打包 ARM64 镜像"
-	docker buildx build --platform linux/arm64 -t quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-arm64 --push -f ./Dockerfile.local .
+	docker buildx build --platform linux/arm64 -t quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-arm64 --load -f ./Dockerfile.local .
+	docker push quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-arm64
 	rm vc-scheduler volcano-npu_*.so -f
 	docker manifest create quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG} \
 	  --amend quanzhenglong.com/camp/volcanosh/vc-scheduler:${IMAGE_TAG}-amd64 \
