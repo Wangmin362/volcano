@@ -239,7 +239,7 @@ IMAGE_TAG=v1.12.1-6.0.rc2.1-test-01
 build-multi:
 	@if [ -z "$${GOPATH}" ]; then echo "❌ $${GOPATH} 环境变量不存在，请先设置"; exit 1; fi
 # 检查是否安装了musl-gcc, 如果没有安装，报错并退出
-# 检查/usr/local/musl/bin/musl-gcc是否存在，如果不存在，就建立一个软连接
+# 检查/usr/local/musl/bin/musl-gcc， /usr/local/musl-aarch64/bin/aarch64-linux-musl-gcc是否存在，不存在就报错，并提示需要把X86以及ARM的分别映射到这两个链接上
 # 如果$GOPATH/src/volcano.sh目录不存在，创建目录
 	@if [ ! -d "$${GOPATH}/src/volcano.sh" ]; then mkdir -p $${GOPATH}/src/volcano.sh; fi
 # 如果$GOPATH/src/volcano.sh/volcano目录存在，删除这个目录
